@@ -9,6 +9,8 @@
 - Selección múltiple de archivos.
 - Preview de archivos seleccionados.
 - Orden manual de piezas antes de entregar.
+- Eliminación de piezas de la selección antes de entregar.
+- Estructura de entrega congelada después del primer envío.
 - Nota opcional por pieza.
 - Nota general opcional por entrega.
 - Estados flexibles de entrega.
@@ -32,15 +34,15 @@
 - Reintento manual.
 - Email a Tomi solo para errores graves del sistema/sincronización.
 - Guidelines como biblioteca manual consultable.
-- AI Memory como capa futura/consultiva basada en feedback de Tomi.
+- AI Memory como proceso activo en segundo plano basado en feedback de Tomi.
+- Generación de información estructurada para alimentar una base de conocimiento.
+- Visualización consultiva de 2-3 aprendizajes de IA en Dashboard.
+- Consulta completa de AI Memory cerca de Guidelines/documentación.
 - Búsqueda global.
 - Dashboard simple.
 
 ## Excluido del MVP
 
-- Inicialización de Next.js o cualquier aplicación.
-- Código de producto.
-- Elección de stack tecnológico.
 - Matriz compleja de roles.
 - Estado funcional **Diseñando**.
 - Cierre automático de entregas.
@@ -50,7 +52,9 @@
 - Pins o coordenadas sobre imagen.
 - Estados manuales de comentario como pendiente, resuelto o en conversación.
 - Entrenamiento de modelo propio.
+- Agente autónomo de revisión.
 - Pre-revisión automática por IA.
+- Reemplazar a Tomi en la revisión.
 - Recomendaciones obligatorias de IA durante carga o revisión.
 - Notificaciones normales por WhatsApp, Telegram, email, push o recordatorios.
 - Deadlines o SLA.

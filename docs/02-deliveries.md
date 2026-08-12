@@ -24,6 +24,30 @@ Ejemplo de nombre generado:
 
 `Stories · 12 Ago · 5 piezas`
 
+## Listado de entregas
+
+Debe existir una pantalla principal tipo inbox/mailbox con todas las entregas.
+
+Cada entrada debería poder mostrar conceptualmente:
+
+- nombre generado;
+- fecha;
+- tipo: Stories / Feed;
+- cantidad de piezas;
+- estado de entrega;
+- resumen como `5 piezas · 3 OK · 2 necesitan cambios`.
+
+Debe permitir:
+
+- entrar al detalle de una entrega;
+- buscar;
+- filtrar por Stories / Feed;
+- filtrar por estado;
+- filtrar por fecha;
+- filtrar por usuario.
+
+No se define todavía una UI detallada.
+
 ## Creación de entrega
 
 La acción principal del Dashboard es **Subir entrega**.
@@ -44,6 +68,31 @@ Datos automáticos:
 - fecha;
 - cantidad de piezas;
 - título/nombre generado por el sistema.
+
+Antes de enviar una entrega se puede:
+
+- seleccionar archivos;
+- ordenar piezas;
+- eliminar piezas de la selección;
+- agregar notas.
+
+## Estructura congelada después del envío
+
+Una vez enviada por primera vez:
+
+- no se pueden agregar nuevas piezas a esa entrega;
+- no se pueden eliminar piezas;
+- no se puede cambiar el orden;
+- no se reemplaza destructivamente una pieza;
+- solo se pueden subir nuevas versiones de las piezas existentes.
+
+El objetivo es preservar la correspondencia histórica entre:
+
+- pieza;
+- posición;
+- versiones;
+- feedback;
+- backup en Drive.
 
 ## Estados de entrega
 
@@ -98,9 +147,10 @@ Journal debe registrar quién eliminó la entrega.
 
 ## Referencias cruzadas
 
-- Piezas y revisión: `03-pieces-and-versions.md`.
+- Piezas, orden y versiones: `03-pieces-and-versions.md`.
 - Feedback: `04-feedback.md`.
 - Journal: `05-journal.md`.
 - Restauración desde Drive: `08-google-drive.md`.
 - Dashboard: `11-dashboard.md`.
+- Búsqueda y filtros: `10-search.md`.
 - Pendientes completos: `13-open-decisions.md`.

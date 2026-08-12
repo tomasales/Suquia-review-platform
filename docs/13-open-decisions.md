@@ -8,6 +8,8 @@ Este documento concentra decisiones abiertas. No resolver estos puntos sin defin
 - Si más adelante se registra también el estado **Publicado**.
 - Política de archivado además de eliminación.
 - UI exacta de restauración desde Drive.
+- Cuando se sube una nueva versión de una pieza, ¿su evaluación actual se reinicia automáticamente a un estado neutro / Sin revisar?
+- Definir si Stories y Feed comparten exactamente el mismo criterio de aprobación/publicación o si existen diferencias operativas. Anteriormente se contempló que Feed no se publique hasta tener todo aprobado y que Stories podrían tolerar observaciones menores salvo que exista un cambio bloqueante, pero esto no está confirmado como regla final.
 
 ## Archivos y contenido
 
@@ -16,11 +18,22 @@ Este documento concentra decisiones abiertas. No resolver estos puntos sin defin
 - Comportamiento exacto de gestión/subida/reemplazo de Guidelines.
 - Convención final de nombres de carpetas/archivos en Drive.
 
+## Usuarios y autenticación
+
+- Cómo limitar el login con Google solamente a usuarios autorizados.
+- Cómo identifica el sistema de forma confiable a Tomi para que únicamente su feedback alimente AI Memory.
+
 ## Usuarios y permisos
 
 - Quién administra Guidelines cuando más adelante existan roles.
 - Detalle final de acceso de Dirección si se decide limitarlo en el futuro.
 - Soporte futuro multi-cliente/workspaces.
+
+## Dirección
+
+- Si Dirección puede ver el feedback de Tomi además de su propia sección.
+- Si la validación de Dirección ocurre por pieza, por entrega o puede soportar ambos niveles.
+- Si en el futuro Dirección tendrá acceso completo o un acceso limitado a entregas compartidas.
 
 ## IA
 
@@ -31,6 +44,14 @@ Este documento concentra decisiones abiertas. No resolver estos puntos sin defin
 
 - Frecuencia/configuración final del health check de Drive.
 - Qué errores son considerados graves para disparar email.
+
+## Restauración
+
+- En qué estado vuelve una entrega restaurada desde Drive.
+
+## Búsqueda
+
+- Si los eventos del Journal también deben formar parte de la búsqueda global.
 
 ## Pendientes adicionales detectados al documentar
 

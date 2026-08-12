@@ -4,16 +4,21 @@
 
 AI Memory es una capa de conocimiento estructurado generada a partir del feedback histórico.
 
-El valor propio del sistema debe estar en la base de conocimiento que se construye a partir del trabajo real.
+Forma parte del MVP como proceso activo en segundo plano. El valor propio del sistema debe estar en la base de conocimiento que se construye a partir del trabajo real.
 
 ## Decisiones tomadas
 
+- AI Memory sí forma parte del MVP.
+- Cada feedback authored by Tomi debe conservarse íntegramente.
+- Cada feedback authored by Tomi debe procesarse en segundo plano.
+- El procesamiento debe generar información estructurada.
+- Esa información estructurada alimenta una base de conocimiento.
 - No entrenar un modelo propio en el MVP.
 - La aplicación podrá utilizar un LLM externo en el futuro.
 - No hacer que la IA guarde lo que quiera.
 - Definir una estructura consistente.
 - Nunca eliminar el feedback original luego del análisis.
-- La información estructurada es una capa adicional.
+- La información estructurada es una capa adicional, no un reemplazo del feedback original.
 
 ## Regla crítica
 
@@ -66,11 +71,16 @@ Ejemplos válidos, siempre que provengan del historial real:
 - Evitar centrar textos en este tipo de composición.
 - Usar un solo recurso gráfico cuando la imagen ya tiene suficiente peso.
 
-## Futuro fuera del MVP
+## Fuera del MVP
 
-La arquitectura debe quedar preparada para que en el futuro esta memoria pueda alimentar un agente capaz de hacer una pre-revisión de piezas creativas.
+La arquitectura debe quedar preparada para que en el futuro esta memoria pueda alimentar capacidades más avanzadas.
 
-Eso no se implementa todavía en MVP.
+No forma parte del MVP:
+
+- agente autónomo de revisión;
+- pre-revisión automática de piezas;
+- reemplazar a Tomi en la revisión;
+- entrenamiento de un modelo propio.
 
 ## Pendiente de definición
 

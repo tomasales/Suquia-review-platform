@@ -9,6 +9,8 @@ Una pieza es cada Story o pieza de Feed dentro de una entrega.
 - Las piezas pertenecen a una entrega.
 - Las piezas mantienen un orden.
 - El orden de las piezas importa.
+- Después del primer envío de una entrega, no se pueden agregar piezas, eliminar piezas ni cambiar su orden.
+- Después del primer envío, solo se pueden subir nuevas versiones de las piezas existentes.
 - No se debe implementar un workflow complejo por pieza en el MVP.
 
 ## Estado de cada pieza

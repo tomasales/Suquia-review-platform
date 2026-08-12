@@ -4,6 +4,8 @@
 
 Debe existir búsqueda global con un modelo mental parecido a un inbox/mailbox.
 
+La búsqueda puede estar integrada en el listado principal de entregas, pero sigue teniendo capacidad de encontrar coincidencias dentro de feedback y conversaciones y llevar al resultado relevante.
+
 La búsqueda debe ayudar a recuperar memoria del proceso de diseño.
 
 ## Contenido buscable
@@ -34,6 +36,7 @@ Idealmente, cada resultado lleva directamente a la pieza/comentario relevante.
 
 - Alcance exacto de búsqueda sobre archivos adjuntos o contenido visual.
 - Microcopy definitivo de filtros y resultados.
+- Si los eventos del Journal también deben formar parte de la búsqueda global.
 
 ## Referencias cruzadas
 
