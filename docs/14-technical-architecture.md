@@ -1,0 +1,144 @@
+# Arquitectura técnica
+
+## Objetivo
+
+Definir una arquitectura concreta para construir el MVP de SUQUIA Review Platform sin implementar todavía la aplicación.
+
+La documentación funcional existente sigue siendo la fuente de verdad. Esta arquitectura no resuelve decisiones abiertas de producto; cuando una decisión técnica depende de ellas, la dependencia queda marcada.
+
+## Resumen recomendado
+
+- **Frontend**: Next.js con App Router y TypeScript.
+- **Backend/API**: la misma aplicación Next.js, usando Route Handlers y Server Actions cuando aporten simplicidad.
+- **Base de datos operativa**: PostgreSQL.
+- **Acceso a datos**: Prisma ORM.
+- **Autenticación**: Auth.js con Google OAuth.
+- **Archivos operativos**: almacenamiento temporal/operativo controlado por backend; Drive como backup persistente.
+- **Google Drive**: Drive API v3 desde backend.
+- **Jobs en segundo plano**: tabla de jobs en PostgreSQL más worker simple dentro del mismo despliegue o proceso separado mínimo si Render lo exige.
+- **AI Memory**: procesamiento incremental de feedback de Tomi con LLM externo configurable.
+- **Búsqueda**: PostgreSQL Full Text Search para MVP.
+- **Deployment**: Render Web Service + Render PostgreSQL.
+- **Secretos**: variables de entorno de Render.
+
+## Decisiones técnicas
+
+### Aplicación full-stack única
+
+- **Decisión**: construir un monolito Next.js full-stack.
+- **Por qué**: el MVP es interno, con pocos usuarios, sin necesidad de microservicios ni frontend/backend separados. Reduce coordinación, despliegue, costos y superficie operativa.
+- **Alternativa descartada**: frontend Next.js separado + API independiente en Express/Nest.
+- **Impacto en costos**: un solo Web Service inicialmente.
+- **Impacto en complejidad**: menor complejidad de despliegue, autenticación y contratos internos.
+
+### Next.js + TypeScript
+
+- **Decisión**: usar Next.js con TypeScript.
+- **Por qué**: permite interfaz, rutas protegidas, endpoints, server-side rendering cuando convenga y despliegue como servidor Node en Render.
+- **Alternativa descartada**: SPA React + backend separado.
+- **Impacto en costos**: no agrega servicios.
+- **Impacto en complejidad**: mantiene una sola base de código.
+
+Según la documentación oficial de Next.js, una app Next.js puede desplegarse como servidor Node.js y conservar soporte completo de features.
+
+### PostgreSQL como base operativa
+
+- **Decisión**: PostgreSQL es la fuente operativa de la aplicación.
+- **Por qué**: el producto necesita relaciones claras entre entregas, piezas, versiones, feedback, Journal, sincronización Drive y AI Memory. PostgreSQL permite integridad, transacciones, JSONB e índices de búsqueda.
+- **Alternativa descartada**: SQLite en disco.
+- **Impacto en costos**: Render ofrece Postgres gratuito para prueba, pero con vencimiento; producción requiere plan pago o proveedor externo.
+- **Impacto en complejidad**: baja para un modelo relacional.
+
+Drive no reemplaza la base operativa. Drive es backup recuperable.
+
+### Prisma ORM
+
+- **Decisión**: usar Prisma ORM.
+- **Por qué**: tipado fuerte, migraciones, buen encaje con TypeScript y Auth.js, y menor fricción para desarrollo asistido por Codex.
+- **Alternativa descartada**: SQL manual con `pg`.
+- **Impacto en costos**: ninguno.
+- **Impacto en complejidad**: reduce errores de acceso a datos, aunque exige disciplina en migrations cuando empiece la implementación.
+
+### Auth.js con Google OAuth
+
+- **Decisión**: Auth.js con proveedor Google.
+- **Por qué**: cubre login OAuth en Next.js, sesiones y persistencia de usuarios con adaptador de base de datos.
+- **Alternativa descartada**: implementar OAuth manualmente.
+- **Impacto en costos**: ninguno.
+- **Impacto en complejidad**: baja.
+
+La autorización de usuarios se modela de forma simple con allowlist/configuración central, sin convertirlo en matriz de roles.
+
+### Google Drive API desde backend
+
+- **Decisión**: toda operación Drive pasa por backend.
+- **Por qué**: evita exponer credenciales, centraliza permisos, Journal y recuperación.
+- **Alternativa descartada**: subir desde frontend directo a Drive.
+- **Impacto en costos**: sin costo directo de infraestructura.
+- **Impacto en complejidad**: moderada por manejo de credenciales, carpetas, manifests y fallos.
+
+### Jobs simples basados en PostgreSQL
+
+- **Decisión**: representar AI processing, sync Drive y recuperación con tablas de jobs/operaciones en PostgreSQL.
+- **Por qué**: evita Redis, RabbitMQ, Kafka u otra infraestructura para pocos usuarios.
+- **Alternativa descartada**: cola externa dedicada.
+- **Impacto en costos**: evita servicios adicionales.
+- **Impacto en complejidad**: baja a moderada; requiere idempotencia y locks simples.
+
+### Búsqueda con PostgreSQL Full Text Search
+
+- **Decisión**: usar PostgreSQL Full Text Search para búsqueda global inicial.
+- **Por qué**: alcanza para entregas, notas, feedback y conversaciones del MVP sin infraestructura externa.
+- **Alternativa descartada**: Elasticsearch, Algolia o búsqueda semántica obligatoria.
+- **Impacto en costos**: ninguno adicional.
+- **Impacto en complejidad**: bajo.
+
+### AI Memory incremental
+
+- **Decisión**: procesar solo feedback nuevo de Tomi, guardar resultado estructurado y reutilizarlo.
+- **Por qué**: cumple MVP, baja costos y evita reenviar historial completo.
+- **Alternativa descartada**: agente autónomo o reprocesamiento completo en cada consulta.
+- **Impacto en costos**: controlado por cantidad de feedback nuevo.
+- **Impacto en complejidad**: moderada, concentrada en job de procesamiento y validación de salida estructurada.
+
+## Flujo técnico general
+
+1. Usuario inicia sesión con Google.
+2. Backend valida que el usuario esté autorizado.
+3. Usuario crea entrega y selecciona piezas.
+4. Backend persiste entrega, piezas, versiones iniciales y operación de sincronización.
+5. Backend intenta crear/actualizar backup en Drive.
+6. Journal registra eventos relevantes.
+7. Feedback de Tomi genera job de AI Memory.
+8. Worker procesa el feedback con LLM y guarda AIKnowledgeEntry.
+9. Dashboard y búsqueda leen de PostgreSQL.
+10. Drive queda disponible para restauración si una entrega fue eliminada de la plataforma.
+
+## Límites intencionales
+
+- No microservicios.
+- No Kubernetes.
+- No Redis/RabbitMQ/Kafka por defecto.
+- No Elasticsearch/Algolia en MVP.
+- No agente autónomo de revisión.
+- No pre-revisión automática.
+- No entrenar modelo propio.
+
+## Dependencias con decisiones abiertas
+
+- Formatos y tamaños de archivo afectan validación de uploads y límites de Render.
+- Estado de pieza al subir nueva versión afecta modelo de evaluación.
+- Identificación confiable de Tomi afecta autorización de AI Memory.
+- Estado al restaurar desde Drive afecta lógica de restore.
+- Búsqueda en Journal afecta índice global.
+
+## Referencias oficiales verificadas
+
+- Next.js deployment: https://nextjs.org/docs/app/getting-started/deploying
+- Render Next.js: https://render.com/docs/deploy-nextjs-app
+- Render free limitations: https://render.com/docs/free
+- Render Postgres: https://render.com/docs/postgresql
+- Prisma PostgreSQL: https://www.prisma.io/docs/orm/core-concepts/supported-databases/postgresql
+- Auth.js: https://authjs.dev/
+- Google Drive API: https://developers.google.com/drive/api/reference/rest/v3
+- PostgreSQL Full Text Search: https://www.postgresql.org/docs/16/textsearch.html
