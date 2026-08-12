@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f6f3;
+  --surface: #ffffff;
+  --surface-muted: #f1f0ed;
+  --foreground: #171615;
+  --muted-foreground: #6d6a64;
+  --subtle-foreground: #918d85;
+  --border: #dedbd4;
+  --primary: #191817;
+  --primary-foreground: #ffffff;
+  --destructive: #a63a32;
+  --success: #287a52;
+  --warning: #9a6a17;
+  --info: #4e6176;
+  --radius: 10px;
+  --sidebar-width: 236px;
+  --content-spacing: 24px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-ui: var(--radius);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}

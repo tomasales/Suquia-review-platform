@@ -18,9 +18,18 @@ La plataforma no busca ser Jira ni una herramienta compleja de project managemen
 
 ## Estado actual
 
-**Especificación / pre-desarrollo.**
+**Implementación iniciada — Bootstrap técnico.**
 
-Este repositorio contiene documentación funcional inicial. Todavía no se eligió stack tecnológico, no se inicializó una aplicación y no hay código de producto.
+Este repositorio contiene documentación funcional, arquitectura técnica y un shell visual inicial en Next.js. Todavía no hay lógica de producto implementada.
+
+## Desarrollo local
+
+```bash
+npm install
+npm run dev
+```
+
+La aplicación local queda disponible en `http://localhost:3000`.
 
 ## Organización de `/docs`
 
