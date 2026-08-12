@@ -14,7 +14,7 @@ Forma parte del MVP como proceso activo en segundo plano. El valor propio del si
 - El procesamiento debe generar información estructurada.
 - Esa información estructurada alimenta una base de conocimiento.
 - No entrenar un modelo propio en el MVP.
-- La aplicación podrá utilizar un LLM externo en el futuro.
+- AI Memory podrá utilizar un LLM externo para procesar y estructurar el feedback. El proveedor y la implementación definitiva están pendientes de definición.
 - No hacer que la IA guarde lo que quiera.
 - Definir una estructura consistente.
 - Nunca eliminar el feedback original luego del análisis.
