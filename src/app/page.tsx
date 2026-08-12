@@ -20,25 +20,18 @@ export default function Home() {
         <AppHeader />
         <main className="px-4 py-5 sm:px-6 lg:px-8">
           <PageHeader
-            eyebrow="Bootstrap técnico"
             title="Dashboard"
-            description="Shell visual inicial para validar densidad, jerarquía y dirección editorial. Los datos son mock temporales."
+            description="Entregas pendientes y actividad reciente."
             action={<Button>Subir entrega</Button>}
           />
 
           <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_336px]">
             <div className="space-y-4">
-              <Surface
-                title="Entregas para revisar"
-                description="Listado operativo compacto, todavía sin datos reales."
-              >
+              <Surface title="Entregas para revisar">
                 <DeliveryTable deliveries={deliveriesForReview} />
               </Surface>
 
-              <Surface
-                title="Entregas recientes"
-                description="Actividad reciente para validar tablas y badges."
-              >
+              <Surface title="Entregas recientes">
                 <DeliveryTable deliveries={recentDeliveries} />
               </Surface>
             </div>
@@ -51,7 +44,7 @@ export default function Home() {
                       Drive conectado
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Indicador visual estático para el bootstrap.
+                      Backup disponible para entregas y versiones.
                     </p>
                   </div>
                   <Badge tone="success">Conectado</Badge>

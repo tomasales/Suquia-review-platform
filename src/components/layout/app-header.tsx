@@ -1,6 +1,4 @@
-import { Bell, Menu, Search } from "lucide-react";
-
-import { Badge } from "@/components/ui/badge";
+import { Menu, Search } from "lucide-react";
 
 export function AppHeader() {
   return (
@@ -22,14 +20,6 @@ export function AppHeader() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <Badge tone="success">Drive conectado</Badge>
-          <button
-            aria-label="Notificaciones"
-            className="hidden size-9 items-center justify-center rounded-[8px] border border-border text-muted-foreground sm:inline-flex"
-            type="button"
-          >
-            <Bell className="size-4" />
-          </button>
           <div className="flex size-9 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-foreground">
             TS
           </div>
