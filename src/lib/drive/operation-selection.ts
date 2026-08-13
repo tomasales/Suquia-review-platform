@@ -14,7 +14,19 @@ export function getOldestPendingDriveBackupQuery() {
     orderBy: {
       createdAt: "asc" as const,
     },
-    where: getDriveBackupOperationWhere(SyncOperationStatus.PENDING),
+    where: {
+      ...getDriveBackupOperationWhere(SyncOperationStatus.PENDING),
+      delivery: {
+        is: {
+          syncOperations: {
+            none: {
+              status: SyncOperationStatus.FAILED,
+              type: DRIVE_BACKUP_OPERATION_TYPE,
+            },
+          },
+        },
+      },
+    },
   };
 }
 

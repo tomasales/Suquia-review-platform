@@ -37,6 +37,7 @@ import {
   getOldestPendingDriveBackupQuery,
 } from "./operation-selection";
 import { resolveDriveBackupRefreshAction } from "./enqueue-rules";
+import { buildAbsorbedPendingFollowUpsWhere } from "./processor-rules";
 
 const createdAt = new Date("2026-08-13T12:00:00.000Z");
 const exportedAt = new Date("2026-08-13T13:00:00.000Z");
@@ -315,6 +316,19 @@ assert.equal(
   getOldestPendingDriveBackupQuery().where.status,
   SyncOperationStatus.PENDING,
 );
+assert.deepEqual(
+  getOldestPendingDriveBackupQuery().where.delivery,
+  {
+    is: {
+      syncOperations: {
+        none: {
+          status: SyncOperationStatus.FAILED,
+          type: "DRIVE_BACKUP_DELIVERY",
+        },
+      },
+    },
+  },
+);
 assert.equal(
   getOldestFailedDriveBackupQuery().where.status,
   SyncOperationStatus.FAILED,
@@ -349,6 +363,16 @@ assert.deepEqual(
     syncOperationId: "failed-1",
   },
 );
+assert.deepEqual(
+  resolveDriveBackupRefreshAction([
+    { id: "failed-1", status: SyncOperationStatus.FAILED },
+    { id: "pending-1", status: SyncOperationStatus.PENDING },
+  ]),
+  {
+    action: "blocked-by-failed",
+    syncOperationId: "failed-1",
+  },
+);
 assert.equal(
   resolveDriveBackupRefreshAction([
     { id: "syncing-1", status: SyncOperationStatus.SYNCING },
@@ -363,6 +387,37 @@ assert.deepEqual(
   {
     action: "reused-pending",
     syncOperationId: "pending-2",
+  },
+);
+
+assert.deepEqual(
+  buildAbsorbedPendingFollowUpsWhere({
+    deliveryId: "delivery-1",
+    syncOperationId: "syncing-operation",
+  }),
+  {
+    deliveryId: "delivery-1",
+    id: { not: "syncing-operation" },
+    status: SyncOperationStatus.PENDING,
+    type: "DRIVE_BACKUP_DELIVERY",
+  },
+);
+
+const retryStartedAt = new Date("2026-08-13T13:20:00.000Z");
+assert.deepEqual(
+  buildAbsorbedPendingFollowUpsWhere({
+    createdAtLte: retryStartedAt,
+    deliveryId: "delivery-1",
+    syncOperationId: "retry-operation",
+  }),
+  {
+    createdAt: {
+      lte: retryStartedAt,
+    },
+    deliveryId: "delivery-1",
+    id: { not: "retry-operation" },
+    status: SyncOperationStatus.PENDING,
+    type: "DRIVE_BACKUP_DELIVERY",
   },
 );
 

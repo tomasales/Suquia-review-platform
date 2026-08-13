@@ -266,6 +266,10 @@ Reglas de coalescing:
 - si solo hay operaciones `SYNCED` históricas, se crea una nueva `PENDING`;
 - los eventos `DRIVE_BACKUP_SYNCED` y `DRIVE_BACKUP_FAILED` no encolan otro backup.
 
+Si una operación `SYNCING` falla, cualquier `PENDING` de la misma Delivery queda absorbida y se elimina como trabajo técnico redundante. Esa Delivery no vuelve a entrar en `process-pending` automático mientras tenga una operación `FAILED`; la única vía normal es **Reintentar backup** manual, que procesa la snapshot canónica actual. Otras Deliveries sin `FAILED` siguen siendo elegibles para sincronización automática.
+
+Si un retry manual pasa de `FAILED` a `SYNCING` y durante ese intento se crea una nueva `PENDING`, el resultado depende del intento: si termina `SYNCED`, se conserva cualquier `PENDING` creada después del inicio del intento; si vuelve a fallar, esa `PENDING` queda absorbida por el nuevo `FAILED`.
+
 El processor actualiza `metadata.json`, `manifest.json`, `journal.jsonl` y los `feedback.jsonl` por versión. Los assets originales se crean con identidad estable y no se vuelven a subir si `PieceVersion.driveFileId` sigue existiendo.
 
 ## deleted_entries.json

@@ -39,6 +39,7 @@ import {
   createStreamFileIfMissing,
   findOrCreateDriveFolder,
 } from "./objects";
+import { buildAbsorbedPendingFollowUpsWhere } from "./processor-rules";
 import { assertDriveBackupOperationType } from "./processor-state";
 import { markDriveConnected, markDriveProblem } from "./state";
 
@@ -110,37 +111,51 @@ export async function processDriveBackupOperation(syncOperationId: string) {
     },
   });
   const attempt = lockedOperation.attempts;
+  const attemptStartedAt = lockedOperation.startedAt ?? new Date();
   let deliveryId: string | null = null;
 
   try {
     deliveryId = getOperationDeliveryId(lockedOperation);
     const result = await backupDeliveryToDrive(deliveryId);
 
-    await db.syncOperation.update({
-      data: {
-        finishedAt: new Date(),
-        lastError: null,
-        status: SyncOperationStatus.SYNCED,
-      },
-      where: {
-        id: syncOperationId,
-      },
+    await db.$transaction(async (tx) => {
+      await tx.syncOperation.update({
+        data: {
+          finishedAt: new Date(),
+          lastError: null,
+          status: SyncOperationStatus.SYNCED,
+        },
+        where: {
+          id: syncOperationId,
+        },
+      });
+
+      await tx.syncOperation.deleteMany(
+        {
+          where: buildAbsorbedPendingFollowUpsWhere({
+            createdAtLte: attemptStartedAt,
+            deliveryId,
+            syncOperationId,
+          }),
+        },
+      );
+
+      await tx.journalEvent.create({
+        data: {
+          deliveryId,
+          entityId: deliveryId,
+          entityType: "DELIVERY",
+          eventType: "DRIVE_BACKUP_SYNCED",
+          metadata: {
+            attempt,
+            driveFolderId: result.deliveryFolderId,
+            manifestFileId: result.manifestFileId,
+            syncOperationId,
+          },
+        },
+      });
     });
     await markDriveConnected();
-    await db.journalEvent.create({
-      data: {
-        deliveryId,
-        entityId: deliveryId,
-        entityType: "DELIVERY",
-        eventType: "DRIVE_BACKUP_SYNCED",
-        metadata: {
-          attempt,
-          driveFolderId: result.deliveryFolderId,
-          manifestFileId: result.manifestFileId,
-          syncOperationId,
-        },
-      },
-    });
 
     return {
       attempt,
@@ -158,30 +173,42 @@ export async function processDriveBackupOperation(syncOperationId: string) {
       syncOperationId,
     });
 
-    await db.syncOperation.update({
-      data: {
-        finishedAt: new Date(),
-        lastError: errorMessage,
-        status: SyncOperationStatus.FAILED,
-      },
-      where: {
-        id: syncOperationId,
-      },
+    await db.$transaction(async (tx) => {
+      await tx.syncOperation.update({
+        data: {
+          finishedAt: new Date(),
+          lastError: errorMessage,
+          status: SyncOperationStatus.FAILED,
+        },
+        where: {
+          id: syncOperationId,
+        },
+      });
+
+      await tx.syncOperation.deleteMany(
+        {
+          where: buildAbsorbedPendingFollowUpsWhere({
+            deliveryId,
+            syncOperationId,
+          }),
+        },
+      );
+
+      await tx.journalEvent.create({
+        data: {
+          deliveryId,
+          entityId: deliveryId,
+          entityType: "DELIVERY",
+          eventType: "DRIVE_BACKUP_FAILED",
+          metadata: {
+            attempt,
+            errorCode,
+            syncOperationId,
+          },
+        },
+      });
     });
     await markDriveProblem({ errorCode, errorMessage });
-    await db.journalEvent.create({
-      data: {
-        deliveryId,
-        entityId: deliveryId,
-        entityType: "DELIVERY",
-        eventType: "DRIVE_BACKUP_FAILED",
-        metadata: {
-          attempt,
-          errorCode,
-          syncOperationId,
-        },
-      },
-    });
 
     return {
       attempt,

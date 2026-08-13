@@ -39,6 +39,8 @@ Las operaciones `PENDING` pueden procesarse oportunísticamente cuando Drive est
 
 Las mutaciones de revisión y feedback guardan primero en PostgreSQL y registran una obligación de refresh Drive como `SyncOperation` coalesced. Si ya existe una operación `FAILED` para esa entrega, no se crea una nueva `PENDING`; el usuario puede guardar su trabajo y el retry manual tomará el snapshot actual completo cuando se ejecute.
 
+Cuando un backup falla, cualquier refresh `PENDING` de esa misma Delivery queda absorbido por el `FAILED`. Esas operaciones pendientes son trabajo técnico no ejecutado; el retry manual del `FAILED` vuelve a leer PostgreSQL y respalda la snapshot canónica más reciente.
+
 ## Journal
 
 Registrar en Journal:
