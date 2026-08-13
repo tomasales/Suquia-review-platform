@@ -42,10 +42,10 @@ export default async function DeliveriesPage({
       />
 
       <section className="mt-5">
-        <Surface>
+        <Surface contentClassName="p-0">
           <form
             action="/deliveries"
-            className="grid items-end gap-2 border-b border-border pb-3 md:grid-cols-[minmax(120px,0.9fr)_minmax(160px,1fr)_minmax(160px,1fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)_auto]"
+            className="grid items-end gap-2 border-b border-border p-4 md:grid-cols-[minmax(120px,0.9fr)_minmax(160px,1fr)_minmax(160px,1fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)_auto]"
           >
             <label className="space-y-1 text-[11px] font-medium text-muted-foreground">
               <span>Tipo</span>
@@ -127,11 +127,11 @@ export default async function DeliveriesPage({
             </div>
           </form>
 
-          <div className="pt-2">
+          <div>
             {deliveries.length > 0 ? (
-              <DeliveryTable deliveries={deliveries} />
+              <DeliveryTable deliveries={deliveries} edgeToEdge />
             ) : filters.isActive ? (
-              <div className="py-8 text-center">
+              <div className="p-8 text-center">
                 <p className="text-sm font-medium text-foreground">
                   No encontramos entregas con estos filtros.
                 </p>
@@ -142,7 +142,7 @@ export default async function DeliveriesPage({
                 </div>
               </div>
             ) : (
-              <div className="py-8 text-center">
+              <div className="p-8 text-center">
                 <p className="text-sm font-medium text-foreground">
                   Todavía no hay entregas
                 </p>

@@ -33,17 +33,17 @@ export default async function DeliveryDetailPage({
       />
 
       <section className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_304px]">
-        <Surface title="Piezas">
+        <Surface contentClassName="p-0" title="Piezas">
           {delivery.pieces.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] border-collapse text-left">
                 <thead>
-                  <tr className="border-y border-border bg-surface-muted/35 text-[11px] font-semibold uppercase tracking-[0.04em] text-subtle-foreground">
-                    <th className="py-2 pr-4">Orden</th>
-                    <th className="py-2 pr-4">Pieza</th>
-                    <th className="py-2 pr-4">Estado</th>
-                    <th className="py-2 pr-4">Versión</th>
-                    <th className="py-2">Nota</th>
+                  <tr className="border-b border-border bg-surface-muted/35 text-[11px] font-semibold uppercase tracking-[0.04em] text-subtle-foreground">
+                    <th className="px-4 py-2">Orden</th>
+                    <th className="px-4 py-2">Pieza</th>
+                    <th className="px-4 py-2">Estado</th>
+                    <th className="px-4 py-2">Versión</th>
+                    <th className="px-4 py-2">Nota</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -52,21 +52,21 @@ export default async function DeliveryDetailPage({
                       className="border-b border-border/85 last:border-0"
                       key={piece.id}
                     >
-                      <td className="py-2.5 pr-4 text-sm text-muted-foreground">
+                      <td className="px-4 py-2.5 text-sm text-muted-foreground">
                         {piece.position}
                       </td>
-                      <td className="py-2.5 pr-4 text-sm font-semibold text-foreground">
+                      <td className="px-4 py-2.5 text-sm font-semibold text-foreground">
                         Pieza {piece.position}
                       </td>
-                      <td className="py-2.5 pr-4 text-sm text-muted-foreground">
+                      <td className="px-4 py-2.5 text-sm text-muted-foreground">
                         {piece.reviewStateLabel}
                       </td>
-                      <td className="py-2.5 pr-4 text-sm text-muted-foreground">
+                      <td className="px-4 py-2.5 text-sm text-muted-foreground">
                         {piece.latestVersion
                           ? `V${piece.latestVersion.versionNumber} · ${piece.latestVersion.originalFilename}`
                           : "Sin versiones"}
                       </td>
-                      <td className="py-2.5 text-sm text-muted-foreground">
+                      <td className="px-4 py-2.5 text-sm text-muted-foreground">
                         {piece.initialNote ?? "Sin nota"}
                       </td>
                     </tr>
@@ -75,7 +75,7 @@ export default async function DeliveryDetailPage({
               </table>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="p-4 text-sm text-muted-foreground">
               Esta entrega no tiene piezas registradas.
             </p>
           )}

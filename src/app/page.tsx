@@ -31,22 +31,31 @@ export default async function Home() {
                 Ver todas
               </ButtonLink>
             }
+            contentClassName="p-0"
             title="Entregas para revisar"
           >
             {deliveriesForReview.length > 0 ? (
-              <DeliveryTable deliveries={deliveriesForReview} variant="compact" />
+              <DeliveryTable
+                deliveries={deliveriesForReview}
+                edgeToEdge
+                variant="compact"
+              />
             ) : (
-              <p className="py-4 text-sm text-muted-foreground">
+              <p className="p-4 text-sm text-muted-foreground">
                 No hay entregas pendientes de revisión.
               </p>
             )}
           </Surface>
 
-          <Surface title="Entregas recientes">
+          <Surface contentClassName="p-0" title="Entregas recientes">
             {recentDeliveries.length > 0 ? (
-              <DeliveryTable deliveries={recentDeliveries} variant="compact" />
+              <DeliveryTable
+                deliveries={recentDeliveries}
+                edgeToEdge
+                variant="compact"
+              />
             ) : (
-              <p className="py-4 text-sm text-muted-foreground">
+              <p className="p-4 text-sm text-muted-foreground">
                 Las entregas que se envíen van a aparecer acá.
               </p>
             )}
