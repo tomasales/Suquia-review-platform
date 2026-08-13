@@ -133,15 +133,17 @@ La autorización de usuarios se modela de forma simple con allowlist/configuraci
 12. Dashboard y búsqueda leen de PostgreSQL.
 13. Drive queda disponible para restauración si una entrega fue eliminada de la plataforma.
 
-Flujo futuro de creación real:
+Flujo de creación real:
 
 ```text
 Browser
-→ request signed PUT
-→ R2 upload
+→ POST /api/deliveries/prepare
+→ backend genera deliveryId/pieceId y signed PUTs para keys definitivas
+→ browser sube archivos directo a R2
+→ POST /api/deliveries/finalize
 → server HEAD verification
 → DB transaction creates Delivery/Piece/PieceVersion
-→ enqueue Drive sync
+→ Journal + SyncOperation PENDING para Drive
 → redirect detail
 ```
 

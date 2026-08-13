@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx src/lib/storage/storage.test.ts",
+    "test": "tsx src/lib/storage/storage.test.ts && tsx src/lib/delivery-creation.test.ts",
     "typecheck": "next typegen && tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

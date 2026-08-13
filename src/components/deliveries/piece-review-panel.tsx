@@ -63,6 +63,31 @@ export function PieceReviewPanel({
             </p>
           </div>
         ) : null}
+
+        {selectedVersion.originalFilename ? (
+          <dl className="mt-4 space-y-2 rounded-[8px] border border-border bg-surface-muted/30 p-3 text-xs">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">Archivo</dt>
+              <dd className="min-w-0 truncate text-right font-medium text-foreground">
+                {selectedVersion.originalFilename}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">Fecha</dt>
+              <dd className="text-right font-medium text-foreground">
+                {selectedVersion.uploadedAtLabel}
+              </dd>
+            </div>
+            {selectedVersion.uploaderLabel ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Subida por</dt>
+                <dd className="min-w-0 truncate text-right font-medium text-foreground">
+                  {selectedVersion.uploaderLabel}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
       </div>
 
       <div

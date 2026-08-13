@@ -21,6 +21,7 @@ import {
   visualReviewDeliveries,
 } from "@/lib/visual-review-data";
 import { isVisualReviewMode } from "@/lib/visual-review";
+import { createReadUrl } from "@/lib/storage/storage";
 
 export const reviewQueueStatuses = [
   DeliveryStatus.SENT_FOR_REVIEW,
@@ -97,9 +98,18 @@ const deliveryDetailSelect = {
         },
         take: 1,
         select: {
+          fileSizeBytes: true,
+          mimeType: true,
           versionNumber: true,
           originalFilename: true,
+          storageKey: true,
           uploadedAt: true,
+          uploadedBy: {
+            select: {
+              email: true,
+              name: true,
+            },
+          },
         },
       },
     },
@@ -115,7 +125,7 @@ export type DeliveryDetailRecord = Prisma.DeliveryGetPayload<{
 }>;
 
 export type DeliveryListItem = ReturnType<typeof toDeliveryListItem>;
-export type DeliveryDetail = ReturnType<typeof toDeliveryDetail>;
+export type DeliveryDetail = Awaited<ReturnType<typeof toDeliveryDetail>>;
 
 export function parseDeliveryFilters(params: DeliverySearchParams = {}) {
   const typeValue = getFirstParam(params.type);
@@ -181,7 +191,7 @@ export async function getDeliveryById(id: string) {
   if (isVisualReviewMode()) {
     const delivery = visualReviewDeliveries.find((item) => item.id === id);
 
-    return delivery ? toDeliveryDetail(delivery) : null;
+    return delivery ? await toDeliveryDetail(delivery) : null;
   }
 
   const delivery = await db.delivery.findFirst({
@@ -303,28 +313,35 @@ function toDeliveryListItem(delivery: DeliveryListRecord) {
   };
 }
 
-function toDeliveryDetail(delivery: DeliveryDetailRecord) {
+async function toDeliveryDetail(delivery: DeliveryDetailRecord) {
   const listItem = toDeliveryListItem({
     ...delivery,
     pieces: delivery.pieces.map((piece) => ({
       reviewState: piece.reviewState,
     })),
   });
-
-  return {
-    ...listItem,
-    generalNote: delivery.generalNote,
-    pieces: delivery.pieces.map((piece) => {
+  const pieces = await Promise.all(
+    delivery.pieces.map(async (piece) => {
       const latestVersion = piece.versions[0] ?? null;
       const visualReviewData = getVisualReviewPieceData(piece.id);
+      const readUrl = latestVersion?.storageKey
+        ? await createReadUrl(latestVersion.storageKey)
+            .then((result) => result.readUrl)
+            .catch(() => null)
+        : null;
       const versions =
         visualReviewData?.versions ??
         (latestVersion
           ? [
               {
+                fileSizeBytes: Number(latestVersion.fileSizeBytes),
+                mimeType: latestVersion.mimeType,
+                originalFilename: latestVersion.originalFilename,
                 versionNumber: latestVersion.versionNumber,
                 uploadedAtLabel: formatDeliveryDate(latestVersion.uploadedAt),
-                imageSrc: null,
+                uploaderLabel:
+                  latestVersion.uploadedBy.name ?? latestVersion.uploadedBy.email,
+                imageSrc: readUrl,
                 feedback: [],
                 references: [],
                 conversation: [],
@@ -345,13 +362,23 @@ function toDeliveryDetail(delivery: DeliveryDetailRecord) {
         versions,
         latestVersion: latestVersion
           ? {
-              versionNumber: latestVersion.versionNumber,
+              fileSizeBytes: Number(latestVersion.fileSizeBytes),
+              mimeType: latestVersion.mimeType,
               originalFilename: latestVersion.originalFilename,
               uploadedAtLabel: formatDeliveryDate(latestVersion.uploadedAt),
+              uploaderLabel:
+                latestVersion.uploadedBy.name ?? latestVersion.uploadedBy.email,
+              versionNumber: latestVersion.versionNumber,
             }
           : null,
       };
     }),
+  );
+
+  return {
+    ...listItem,
+    generalNote: delivery.generalNote,
+    pieces,
   };
 }
 

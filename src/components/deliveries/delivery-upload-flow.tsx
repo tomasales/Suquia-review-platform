@@ -29,6 +29,7 @@ import { Surface } from "@/components/ui/surface";
 import { useToast } from "@/components/ui/toast";
 
 type DeliveryType = "STORIES" | "FEED";
+type PieceUploadStatus = "idle" | "uploading" | "uploaded" | "error";
 
 type UploadPiece = {
   file: File;
@@ -38,6 +39,40 @@ type UploadPiece = {
   noteEditing: boolean;
   previewError: boolean;
   previewUrl: string;
+  uploadError: string | null;
+  uploadStatus: PieceUploadStatus;
+};
+
+type PreparedAttemptPiece = {
+  expiresAt: string;
+  localPieceId: string;
+  pieceId: string;
+  position: number;
+  storageKey: string;
+  uploaded: boolean;
+  uploadUrl: string;
+};
+
+type PreparedAttempt = {
+  deliveryId: string;
+  pieces: PreparedAttemptPiece[];
+  type: DeliveryType;
+};
+
+type PrepareDeliveryResponse = {
+  deliveryId: string;
+  pieces: Array<{
+    expiresAt: string;
+    pieceId: string;
+    position: number;
+    storageKey: string;
+    uploadUrl: string;
+  }>;
+};
+
+type FinalizeDeliveryResponse = {
+  alreadyFinalized: boolean;
+  deliveryId: string;
 };
 
 type DeliveryUploadFlowProps = {
@@ -97,6 +132,8 @@ function createPiece(file: File): UploadPiece {
     noteEditing: false,
     previewError: false,
     previewUrl: URL.createObjectURL(file),
+    uploadError: null,
+    uploadStatus: "idle",
   };
 }
 
@@ -106,6 +143,120 @@ function isSupportedFile(file: File) {
   }
 
   return /\.(jpe?g|png|webp)$/i.test(file.name);
+}
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+
+    throw new Error(payload?.error ?? "Tus cambios siguen acá. Intentá nuevamente.");
+  }
+
+  return response.json() as Promise<T>;
+}
+
+async function prepareDeliveryUpload({
+  pieces,
+  type,
+}: {
+  pieces: Array<{
+    file: File;
+    id: string;
+  }>;
+  type: DeliveryType;
+}): Promise<PreparedAttempt> {
+  const result = await postJson<PrepareDeliveryResponse>(
+    "/api/deliveries/prepare",
+    {
+      pieces: pieces.map((piece) => ({
+        fileSizeBytes: piece.file.size,
+        filename: piece.file.name,
+        mimeType: piece.file.type,
+      })),
+      type,
+    },
+  );
+
+  return {
+    deliveryId: result.deliveryId,
+    pieces: result.pieces.map((piece, index) => ({
+      ...piece,
+      localPieceId: pieces[index]?.id ?? "",
+      uploaded: false,
+    })),
+    type,
+  };
+}
+
+async function finalizeDeliveryUpload({
+  attempt,
+  generalNote,
+  pieces,
+  type,
+}: {
+  attempt: PreparedAttempt;
+  generalNote: string;
+  pieces: Array<{
+    file: File;
+    id: string;
+    note: string;
+  }>;
+  type: DeliveryType;
+}) {
+  const pieceById = new Map(pieces.map((piece) => [piece.id, piece]));
+
+  return postJson<FinalizeDeliveryResponse>("/api/deliveries/finalize", {
+    deliveryId: attempt.deliveryId,
+    generalNote,
+    pieces: attempt.pieces.map((preparedPiece) => {
+      const piece = pieceById.get(preparedPiece.localPieceId);
+
+      if (!piece) {
+        throw new Error("Tus cambios siguen acá. Intentá nuevamente.");
+      }
+
+      return {
+        fileSizeBytes: piece.file.size,
+        mimeType: piece.file.type,
+        note: piece.note,
+        originalFilename: piece.file.name,
+        pieceId: preparedPiece.pieceId,
+        position: preparedPiece.position,
+        storageKey: preparedPiece.storageKey,
+      };
+    }),
+    type,
+  });
+}
+
+async function cleanupUploadedObjects(storageKeys: string[]) {
+  await Promise.allSettled(
+    storageKeys.map((storageKey) =>
+      fetch("/api/storage/object", {
+        body: JSON.stringify({ storageKey }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "DELETE",
+      }),
+    ),
+  );
+}
+
+function getClientErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "Tus cambios siguen acá. Intentá nuevamente.";
 }
 
 export function DeliveryUploadFlow({
@@ -122,6 +273,9 @@ export function DeliveryUploadFlow({
   const [generalNote, setGeneralNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pieces, setPieces] = useState<UploadPiece[]>([]);
+  const [preparedAttempt, setPreparedAttempt] = useState<PreparedAttempt | null>(
+    null,
+  );
 
   useEffect(() => {
     piecesRef.current = pieces;
@@ -158,14 +312,20 @@ export function DeliveryUploadFlow({
       return "Agregá al menos una pieza para entregar.";
     }
 
-    if (!visualReviewMode) {
-      return "El envío real todavía no está activo.";
+    if (visualReviewMode) {
+      return "Vista previa: la entrega todavía no se guardó.";
     }
 
-    return "Vista previa: la entrega todavía no se guardó.";
+    return "Al entregar se suben las piezas y se abre el detalle.";
   }, [deliveryType, pieces.length, visualReviewMode]);
 
   function addFiles(fileList: FileList | File[]) {
+    if (isSubmitting) {
+      return;
+    }
+
+    discardPreparedAttemptForStructuralChange();
+
     const incomingFiles = Array.from(fileList);
     const supportedFiles = incomingFiles.filter(isSupportedFile);
     const unsupportedFiles = incomingFiles.filter((file) => !isSupportedFile(file));
@@ -199,14 +359,24 @@ export function DeliveryUploadFlow({
   }
 
   function chooseType(nextType: DeliveryType) {
+    if (isSubmitting) {
+      return;
+    }
+
     if (deliveryType === nextType) {
       return;
     }
 
+    discardPreparedAttemptForStructuralChange();
     setDeliveryType(nextType);
   }
 
   function removePiece(pieceId: string) {
+    if (isSubmitting) {
+      return;
+    }
+
+    discardPreparedAttemptForStructuralChange();
     setPieces((currentPieces) => {
       const pieceToRemove = currentPieces.find((piece) => piece.id === pieceId);
 
@@ -219,6 +389,11 @@ export function DeliveryUploadFlow({
   }
 
   function movePiece(pieceId: string, direction: -1 | 1) {
+    if (isSubmitting) {
+      return;
+    }
+
+    discardPreparedAttemptForStructuralChange();
     setPieces((currentPieces) => {
       const currentIndex = currentPieces.findIndex((piece) => piece.id === pieceId);
       const nextIndex = currentIndex + direction;
@@ -240,6 +415,10 @@ export function DeliveryUploadFlow({
   }
 
   function updatePieceNoteDraft(pieceId: string, noteDraft: string) {
+    if (isSubmitting) {
+      return;
+    }
+
     setPieces((currentPieces) =>
       currentPieces.map((piece) =>
         piece.id === pieceId ? { ...piece, noteDraft } : piece,
@@ -248,6 +427,10 @@ export function DeliveryUploadFlow({
   }
 
   function startEditingPieceNote(pieceId: string) {
+    if (isSubmitting) {
+      return;
+    }
+
     setPieces((currentPieces) =>
       currentPieces.map((piece) =>
         piece.id === pieceId
@@ -258,6 +441,10 @@ export function DeliveryUploadFlow({
   }
 
   function cancelPieceNote(pieceId: string) {
+    if (isSubmitting) {
+      return;
+    }
+
     setPieces((currentPieces) =>
       currentPieces.map((piece) =>
         piece.id === pieceId
@@ -268,6 +455,10 @@ export function DeliveryUploadFlow({
   }
 
   function savePieceNote(pieceId: string) {
+    if (isSubmitting) {
+      return;
+    }
+
     setPieces((currentPieces) =>
       currentPieces.map((piece) =>
         piece.id === pieceId
@@ -302,10 +493,18 @@ export function DeliveryUploadFlow({
   }
 
   function handlePieceDragStart(pieceId: string) {
+    if (isSubmitting) {
+      return;
+    }
+
     draggedPieceId.current = pieceId;
   }
 
   function handlePieceDrop(targetPieceId: string) {
+    if (isSubmitting) {
+      return;
+    }
+
     const sourcePieceId = draggedPieceId.current;
     draggedPieceId.current = null;
 
@@ -313,6 +512,7 @@ export function DeliveryUploadFlow({
       return;
     }
 
+    discardPreparedAttemptForStructuralChange();
     setPieces((currentPieces) => {
       const sourceIndex = currentPieces.findIndex(
         (piece) => piece.id === sourcePieceId,
@@ -333,39 +533,210 @@ export function DeliveryUploadFlow({
     });
   }
 
+  function setPieceUploadState(
+    pieceId: string,
+    uploadStatus: PieceUploadStatus,
+    uploadError: string | null = null,
+  ) {
+    setPieces((currentPieces) =>
+      currentPieces.map((piece) =>
+        piece.id === pieceId ? { ...piece, uploadError, uploadStatus } : piece,
+      ),
+    );
+  }
+
+  function resetPieceUploadState() {
+    setPieces((currentPieces) =>
+      currentPieces.map((piece) => ({
+        ...piece,
+        uploadError: null,
+        uploadStatus: "idle",
+      })),
+    );
+  }
+
+  function discardPreparedAttemptForStructuralChange() {
+    if (!preparedAttempt) {
+      return;
+    }
+
+    void cleanupUploadedObjects(
+      preparedAttempt.pieces
+        .filter((piece) => piece.uploaded)
+        .map((piece) => piece.storageKey),
+    );
+    setPreparedAttempt(null);
+    resetPieceUploadState();
+  }
+
+  async function uploadPreparedPieces(
+    attempt: PreparedAttempt,
+    snapshotPieces: Array<{
+      file: File;
+      id: string;
+    }>,
+  ) {
+    const nextAttempt: PreparedAttempt = {
+      ...attempt,
+      pieces: attempt.pieces.map((piece) => ({ ...piece })),
+    };
+    const fileByPieceId = new Map(
+      snapshotPieces.map((piece) => [piece.id, piece.file]),
+    );
+    const uploadedKeys: string[] = [];
+    const errors: Array<{ localPieceId: string }> = [];
+    let cursor = 0;
+
+    async function worker() {
+      while (cursor < nextAttempt.pieces.length && errors.length === 0) {
+        const index = cursor;
+        cursor += 1;
+
+        const preparedPiece = nextAttempt.pieces[index];
+
+        if (!preparedPiece || preparedPiece.uploaded) {
+          continue;
+        }
+
+        const file = fileByPieceId.get(preparedPiece.localPieceId);
+
+        if (!file) {
+          errors.push({ localPieceId: preparedPiece.localPieceId });
+          setPieceUploadState(
+            preparedPiece.localPieceId,
+            "error",
+            "No pudimos subir esta pieza.",
+          );
+          continue;
+        }
+
+        setPieceUploadState(preparedPiece.localPieceId, "uploading");
+
+        try {
+          const response = await fetch(preparedPiece.uploadUrl, {
+            body: file,
+            headers: {
+              "Content-Type": file.type,
+            },
+            method: "PUT",
+          });
+
+          if (!response.ok) {
+            throw new Error("Upload failed");
+          }
+
+          preparedPiece.uploaded = true;
+          uploadedKeys.push(preparedPiece.storageKey);
+          setPieceUploadState(preparedPiece.localPieceId, "uploaded");
+        } catch {
+          errors.push({ localPieceId: preparedPiece.localPieceId });
+          setPieceUploadState(
+            preparedPiece.localPieceId,
+            "error",
+            "No pudimos subir esta pieza.",
+          );
+        }
+      }
+    }
+
+    await Promise.all(Array.from({ length: 4 }, () => worker()));
+
+    if (errors.length > 0) {
+      await cleanupUploadedObjects(uploadedKeys);
+      setPreparedAttempt(null);
+      setPieces((currentPieces) =>
+        currentPieces.map((piece) =>
+          piece.uploadStatus === "uploaded"
+            ? { ...piece, uploadError: null, uploadStatus: "idle" }
+            : piece,
+        ),
+      );
+      throw new Error("Tus cambios siguen acá. Intentá nuevamente.");
+    }
+
+    return nextAttempt;
+  }
+
   async function handleSubmit() {
-    if (!canSubmit || !visualReviewMode || isSubmitting) {
+    if (!canSubmit || isSubmitting || !deliveryType) {
       return;
     }
 
     setIsSubmitting(true);
+    setErrors([]);
 
-    await new Promise((resolve) => window.setTimeout(resolve, 650));
+    if (visualReviewMode) {
+      await new Promise((resolve) => window.setTimeout(resolve, 650));
 
-    const shouldSimulateError =
-      process.env.NODE_ENV === "development" &&
-      new URLSearchParams(window.location.search).get("simulateCreateError") ===
-        "1";
+      const shouldSimulateError =
+        process.env.NODE_ENV === "development" &&
+        new URLSearchParams(window.location.search).get("simulateCreateError") ===
+          "1";
 
-    if (shouldSimulateError) {
-      setIsSubmitting(false);
-      showToast({
-        title: "No pudimos crear la entrega",
-        description: "Tus cambios siguen acá. Intentá nuevamente.",
-        tone: "error",
-      });
+      if (shouldSimulateError) {
+        setIsSubmitting(false);
+        showToast({
+          title: "No pudimos crear la entrega",
+          description: "Tus cambios siguen acá. Intentá nuevamente.",
+          tone: "error",
+        });
+        return;
+      }
+
+      const targetDeliveryId =
+        deliveryType === "FEED" ? "visual-feed-review" : "visual-stories-sent";
+
+      router.push(
+        `/deliveries/${targetDeliveryId}?created=1&pieces=${pieces.length}`,
+      );
       return;
     }
 
-    const targetDeliveryId =
-      deliveryType === "FEED" ? "visual-feed-review" : "visual-stories-sent";
+    const snapshot = {
+      generalNote,
+      pieces: pieces.map((piece) => ({
+        file: piece.file,
+        id: piece.id,
+        note: piece.note,
+      })),
+      type: deliveryType,
+    };
 
-    // Future real flow:
-    // const createdDelivery = await createDelivery(...)
-    // router.push(`/deliveries/${createdDelivery.id}`)
-    router.push(
-      `/deliveries/${targetDeliveryId}?created=1&pieces=${pieces.length}`,
-    );
+    try {
+      const attempt =
+        preparedAttempt ??
+        (await prepareDeliveryUpload({
+          pieces: snapshot.pieces,
+          type: snapshot.type,
+        }));
+      let uploadedAttempt = attempt;
+
+      setPreparedAttempt(attempt);
+
+      if (!attempt.pieces.every((piece) => piece.uploaded)) {
+        uploadedAttempt = await uploadPreparedPieces(attempt, snapshot.pieces);
+        setPreparedAttempt(uploadedAttempt);
+      }
+
+      const result = await finalizeDeliveryUpload({
+        attempt: uploadedAttempt,
+        generalNote: snapshot.generalNote,
+        pieces: snapshot.pieces,
+        type: snapshot.type,
+      });
+
+      router.push(
+        `/deliveries/${result.deliveryId}?created=1&pieces=${snapshot.pieces.length}`,
+      );
+    } catch (error) {
+      showToast({
+        title: "No pudimos crear la entrega",
+        description: getClientErrorMessage(error),
+        tone: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -388,6 +759,7 @@ export function DeliveryUploadFlow({
                         ? "border-foreground bg-surface-muted text-foreground"
                         : "border-border bg-background text-muted-foreground hover:bg-surface-muted hover:text-foreground"
                     }`}
+                    disabled={isSubmitting}
                     key={type.value}
                     onClick={() => chooseType(type.value)}
                     type="button"
@@ -417,6 +789,7 @@ export function DeliveryUploadFlow({
             action={
               pieces.length > 0 ? (
                 <Button
+                  disabled={isSubmitting}
                   onClick={() => inputRef.current?.click()}
                   size="sm"
                   variant="secondary"
@@ -430,6 +803,7 @@ export function DeliveryUploadFlow({
             <input
               accept="image/jpeg,image/png,image/webp"
               className="sr-only"
+              disabled={isSubmitting}
               multiple
               onChange={handleInputChange}
               ref={inputRef}
@@ -460,6 +834,7 @@ export function DeliveryUploadFlow({
                   </p>
                   <Button
                     className="mt-4 min-h-11 px-5"
+                    disabled={isSubmitting}
                     onClick={() => inputRef.current?.click()}
                     variant="secondary"
                   >
@@ -481,6 +856,7 @@ export function DeliveryUploadFlow({
                 >
                   <button
                     className="flex min-h-11 w-full items-center justify-center gap-2 rounded-[7px] font-medium"
+                    disabled={isSubmitting}
                     onClick={() => inputRef.current?.click()}
                     type="button"
                   >
@@ -506,6 +882,7 @@ export function DeliveryUploadFlow({
                       onSaveNote={savePieceNote}
                       onStartEditingNote={startEditingPieceNote}
                       onUpdateNoteDraft={updatePieceNoteDraft}
+                      isDisabled={isSubmitting}
                       piece={piece}
                     />
                   ))}
@@ -534,6 +911,7 @@ export function DeliveryUploadFlow({
             </label>
             <textarea
               className="min-h-28 w-full resize-y rounded-[8px] border border-border bg-background px-3 py-2.5 text-sm leading-6 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-foreground"
+              disabled={isSubmitting}
               id="general-note"
               onChange={(event) => {
                 setGeneralNote(event.target.value);
@@ -566,7 +944,7 @@ export function DeliveryUploadFlow({
 
               <Button
                 className="min-h-11 w-full"
-                disabled={!canSubmit || !visualReviewMode || isSubmitting}
+                disabled={!canSubmit || isSubmitting}
                 onClick={handleSubmit}
               >
                 {isSubmitting ? "Entregando..." : "Entregar"}
@@ -593,8 +971,28 @@ type UploadPieceCardProps = {
   onSaveNote: (pieceId: string) => void;
   onStartEditingNote: (pieceId: string) => void;
   onUpdateNoteDraft: (pieceId: string, noteDraft: string) => void;
+  isDisabled: boolean;
   piece: UploadPiece;
 };
+
+function getUploadBadge(piece: UploadPiece) {
+  if (piece.uploadStatus === "uploading") {
+    return { label: "Subiendo", tone: "info" as const };
+  }
+
+  if (piece.uploadStatus === "uploaded") {
+    return { label: "Subida", tone: "success" as const };
+  }
+
+  if (piece.uploadStatus === "error") {
+    return { label: "Error", tone: "warning" as const };
+  }
+
+  return {
+    label: piece.previewError ? "Sin preview" : "Local",
+    tone: piece.previewError ? ("warning" as const) : ("neutral" as const),
+  };
+}
 
 function UploadPieceCard({
   aspectClass,
@@ -610,15 +1008,17 @@ function UploadPieceCard({
   onSaveNote,
   onStartEditingNote,
   onUpdateNoteDraft,
+  isDisabled,
   piece,
 }: UploadPieceCardProps) {
   const position = String(index + 1).padStart(2, "0");
   const hasSavedNote = piece.note.trim().length > 0;
+  const uploadBadge = getUploadBadge(piece);
 
   return (
     <article
       className="rounded-[8px] border border-border bg-background p-2"
-      draggable
+      draggable={!isDisabled}
       onDragOver={(event) => event.preventDefault()}
       onDragStart={() => onDragStart(piece.id)}
       onDrop={() => onDrop(piece.id)}
@@ -628,15 +1028,13 @@ function UploadPieceCard({
           <span className="inline-flex h-7 min-w-8 items-center justify-center rounded-[7px] border border-border bg-surface px-2 text-xs font-semibold text-foreground">
             {position}
           </span>
-          <Badge tone={piece.previewError ? "warning" : "neutral"}>
-            {piece.previewError ? "Sin preview" : "Local"}
-          </Badge>
+          <Badge tone={uploadBadge.tone}>{uploadBadge.label}</Badge>
         </div>
         <div className="flex items-center gap-1">
           <button
             aria-label={`Mover pieza ${position} arriba`}
             className="inline-flex size-9 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-surface-muted hover:text-foreground disabled:opacity-35"
-            disabled={isFirst}
+            disabled={isFirst || isDisabled}
             onClick={() => onMove(piece.id, -1)}
             type="button"
           >
@@ -645,7 +1043,7 @@ function UploadPieceCard({
           <button
             aria-label={`Mover pieza ${position} abajo`}
             className="inline-flex size-9 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-surface-muted hover:text-foreground disabled:opacity-35"
-            disabled={isLast}
+            disabled={isLast || isDisabled}
             onClick={() => onMove(piece.id, 1)}
             type="button"
           >
@@ -654,6 +1052,7 @@ function UploadPieceCard({
           <button
             aria-label={`Eliminar pieza ${position}`}
             className="inline-flex size-9 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-surface-muted hover:text-destructive"
+            disabled={isDisabled}
             onClick={() => onRemove(piece.id)}
             type="button"
           >
@@ -698,6 +1097,11 @@ function UploadPieceCard({
         <p className="mt-0.5 text-xs text-muted-foreground">
           {formatFileSize(piece.file.size)}
         </p>
+        {piece.uploadError ? (
+          <p className="mt-1 text-xs font-medium text-destructive">
+            {piece.uploadError}
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-3">
@@ -711,6 +1115,7 @@ function UploadPieceCard({
             </label>
             <textarea
               className="min-h-20 w-full resize-y rounded-[8px] border border-border bg-surface px-3 py-2 text-sm leading-5 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-foreground"
+              disabled={isDisabled}
               id={`piece-note-${piece.id}`}
               onChange={(event) =>
                 onUpdateNoteDraft(piece.id, event.target.value)
@@ -721,6 +1126,7 @@ function UploadPieceCard({
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Button
                 className="min-h-10"
+                disabled={isDisabled}
                 onClick={() => onCancelNote(piece.id)}
                 size="sm"
                 variant="secondary"
@@ -729,6 +1135,7 @@ function UploadPieceCard({
               </Button>
               <Button
                 className="min-h-10"
+                disabled={isDisabled}
                 onClick={() => onSaveNote(piece.id)}
                 size="sm"
               >
@@ -746,6 +1153,7 @@ function UploadPieceCard({
             </p>
             <button
               className="mt-2 inline-flex min-h-9 items-center gap-2 rounded-[8px] text-sm font-medium text-muted-foreground hover:text-foreground"
+              disabled={isDisabled}
               onClick={() => onStartEditingNote(piece.id)}
               type="button"
             >
@@ -756,6 +1164,7 @@ function UploadPieceCard({
         ) : (
           <button
             className="inline-flex min-h-10 items-center gap-2 rounded-[8px] px-2 text-sm font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+            disabled={isDisabled}
             onClick={() => onStartEditingNote(piece.id)}
             type="button"
           >

@@ -18,9 +18,9 @@ La plataforma no busca ser Jira ni una herramienta compleja de project managemen
 
 ## Estado actual
 
-**Implementación iniciada — Bootstrap técnico.**
+**Implementación iniciada.**
 
-Este repositorio contiene documentación funcional, arquitectura técnica y un shell visual inicial en Next.js. Todavía no hay lógica de producto implementada.
+Este repositorio contiene documentación funcional, arquitectura técnica, shell visual en Next.js, autenticación, modelo PostgreSQL, fundación de storage en Cloudflare R2 y el primer flujo real de creación de Delivery.
 
 ## Desarrollo local
 
@@ -30,6 +30,24 @@ npm run dev
 ```
 
 La aplicación local queda disponible en `http://localhost:3000`.
+
+Para modo real hacen falta, como mínimo:
+
+- `DATABASE_URL`
+- credenciales Google OAuth/Auth.js
+- variables Cloudflare R2
+
+Variables R2:
+
+```bash
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
+R2_ENDPOINT=
+```
+
+El flujo real de **Nueva entrega** prepara IDs definitivos, sube piezas directo desde el navegador a R2 con URLs firmadas, verifica los objetos, crea Delivery/Pieces/PieceVersion V1 en PostgreSQL, registra Journal y deja una SyncOperation pendiente para el backup futuro en Drive.
 
 ## Visual review local
 

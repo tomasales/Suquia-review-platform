@@ -118,9 +118,13 @@ function visualPiece(
     reviewState,
     versions: [
       {
+        fileSizeBytes: BigInt(280000),
+        mimeType: "image/jpeg",
         versionNumber,
         originalFilename: `pieza-${position}.jpg`,
+        storageKey: null,
         uploadedAt: new Date("2026-08-13T09:00:00"),
+        uploadedBy: visualReviewAuthors[1],
       },
     ],
   };
@@ -147,9 +151,13 @@ export type VisualReviewConversationItem = {
 };
 
 export type VisualReviewVersionData = {
+  fileSizeBytes?: number;
   versionNumber: number;
   uploadedAtLabel: string;
   imageSrc: string;
+  mimeType?: string;
+  originalFilename?: string;
+  uploaderLabel?: string;
   feedback: VisualReviewFeedbackItem[];
   references: VisualReviewReference[];
   conversation: VisualReviewConversationItem[];

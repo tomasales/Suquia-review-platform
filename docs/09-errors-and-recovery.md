@@ -53,6 +53,7 @@ No implementar:
 
 - Qué errores son considerados graves para disparar email.
 - Cómo se representan internamente los borradores/pendientes técnicos.
+- Cómo limpiar objetos R2 preparados o subidos con keys definitivas cuando el navegador se cierra o el flujo no llega a finalizar en PostgreSQL.
 
 ## Referencias cruzadas
 

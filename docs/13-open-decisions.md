@@ -39,6 +39,7 @@ Este documento concentra decisiones abiertas. No resolver estos puntos sin defin
 
 - Frecuencia/configuración final del health check de Drive.
 - Qué errores son considerados graves para disparar email.
+- Estrategia de limpieza para objetos R2 con keys definitivas que fueron preparados/subidos pero nunca finalizaron en PostgreSQL por cierre del navegador, pérdida de conexión o abandono del flujo.
 
 ## Restauración
 

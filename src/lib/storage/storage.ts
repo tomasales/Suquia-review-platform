@@ -60,6 +60,40 @@ export async function createUploadUrl({
   };
 }
 
+export async function createUploadUrlForStorageKey({
+  fileSizeBytes,
+  filename,
+  mimeType,
+  storageKey,
+}: {
+  fileSizeBytes: number;
+  filename: string;
+  mimeType: string;
+  storageKey: string;
+}) {
+  validateUploadUrlInput({
+    fileSizeBytes,
+    filename,
+    mimeType,
+    purpose: "piece-version",
+  });
+  assertValidStorageKey(storageKey);
+
+  const uploadUrl = await createR2SignedUploadUrl({
+    contentType: mimeType,
+    expiresInSeconds: SIGNED_UPLOAD_EXPIRES_IN_SECONDS,
+    storageKey,
+  });
+
+  return {
+    expiresAt: new Date(
+      Date.now() + SIGNED_UPLOAD_EXPIRES_IN_SECONDS * 1000,
+    ).toISOString(),
+    storageKey,
+    uploadUrl,
+  };
+}
+
 export async function createReadUrl(storageKey: string) {
   assertValidStorageKey(storageKey);
 
