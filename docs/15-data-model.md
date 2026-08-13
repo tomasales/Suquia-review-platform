@@ -21,7 +21,7 @@
 
 - **Propósito**: identidad de cada persona autenticada.
 - **ID**: inmutable.
-- **Campos principales**: email único, nombre, avatar, `isActive`, `isAiLearningSource`, `lastLoginAt`.
+- **Campos principales**: email único, `name`, `emailVerified`, avatar, `isActive`, `isAiLearningSource`, `lastLoginAt`.
 - **Relaciones**: deliveries creadas, feedback, replies, journal events, uploads.
 - **Timestamps**: `createdAt`, `updatedAt`.
 - **Índices relevantes**: email único, `isAiLearningSource`.
@@ -30,11 +30,13 @@
 
 `isAiLearningSource` identifica centralmente a Tomi para AI Memory sin hardcodear emails en la lógica distribuida.
 
+Auth.js usa `name`, `emailVerified`, `Account`, `Session` y `VerificationToken` para compatibilidad nativa con Prisma Adapter. La sesión operativa se persiste en PostgreSQL.
+
 ## AuthorizedEmail
 
 - **Propósito**: allowlist simple de emails que pueden entrar.
 - **ID**: inmutable.
-- **Campos principales**: email único, invitedByUserId opcional, note, active.
+- **Campos principales**: email único, invitedByUserId opcional, note, active, `isAiLearningSource`.
 - **Relaciones**: usuario invitador opcional.
 - **Timestamps**: `createdAt`, `updatedAt`.
 - **Índices relevantes**: email único, active.
@@ -234,3 +236,4 @@ Usarla solo para valores como carpeta raíz Drive, flags de health check o confi
 - Listas flexibles de AI Memory como categorías, tags, topics y referencias se modelan como arrays de texto de PostgreSQL. Metadata flexible, payloads técnicos y configuración central usan JSONB.
 - Las invariantes complejas de feedback, por ejemplo coherencia entre `level`, `pieceId` y `pieceVersionId`, quedan para validación de aplicación en módulos posteriores.
 - No se agregan índices Full Text Search en este módulo; el schema conserva texto estructurado para habilitar búsqueda en una etapa posterior.
+- Los emails de autenticación se normalizan en aplicación con `trim().toLowerCase()` antes de consultar allowlist o sincronizar User. No se agrega extensión PostgreSQL ni índice funcional en este módulo.

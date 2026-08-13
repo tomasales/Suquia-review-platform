@@ -59,7 +59,8 @@ enum DriveSyncStatus {
 model User {
   id                 String    @id @default(uuid())
   email              String    @unique
-  displayName        String
+  name               String?
+  emailVerified      DateTime?
   image              String?
   isActive           Boolean   @default(true)
   isAiLearningSource Boolean   @default(false)
@@ -67,6 +68,8 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
+  accounts             Account[]
+  sessions             Session[]
   invitedEmails        AuthorizedEmail[]     @relation("AuthorizedEmailInviter")
   createdDeliveries    Delivery[]            @relation("DeliveryCreator")
   deletedDeliveries    Delivery[]            @relation("DeliveryDeletedBy")
@@ -85,18 +88,59 @@ model User {
 }
 
 model AuthorizedEmail {
-  id              String   @id @default(uuid())
-  email           String   @unique
-  active          Boolean  @default(true)
-  note            String?
-  invitedByUserId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  active             Boolean  @default(true)
+  isAiLearningSource Boolean  @default(false)
+  note               String?
+  invitedByUserId    String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   invitedBy User? @relation("AuthorizedEmailInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
 
   @@index([active])
+  @@index([isAiLearningSource])
   @@index([invitedByUserId])
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
 
 model Delivery {

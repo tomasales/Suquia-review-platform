@@ -18,11 +18,6 @@ Este documento concentra decisiones abiertas. No resolver estos puntos sin defin
 - Comportamiento exacto de gestión/subida/reemplazo de Guidelines.
 - Convención final de nombres de carpetas/archivos en Drive.
 
-## Usuarios y autenticación
-
-- Cómo limitar el login con Google solamente a usuarios autorizados.
-- Cómo identifica el sistema de forma confiable a Tomi para que únicamente su feedback alimente AI Memory.
-
 ## Usuarios y permisos
 
 - Quién administra Guidelines cuando más adelante existan roles.

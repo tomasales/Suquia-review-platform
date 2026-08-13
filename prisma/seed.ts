@@ -8,7 +8,7 @@ async function main() {
     update: {},
     create: {
       email: "reviewer@example.test",
-      displayName: "Reviewer Example",
+      name: "Reviewer Example",
       isAiLearningSource: true,
     },
   });
@@ -18,16 +18,17 @@ async function main() {
     update: {},
     create: {
       email: "collaborator@example.test",
-      displayName: "Collaborator Example",
+      name: "Collaborator Example",
     },
   });
 
   await prisma.authorizedEmail.upsert({
     where: { email: reviewer.email },
-    update: { active: true },
+    update: { active: true, isAiLearningSource: true },
     create: {
       email: reviewer.email,
       active: true,
+      isAiLearningSource: true,
       note: "Technical seed user",
       invitedByUserId: reviewer.id,
     },
@@ -39,6 +40,7 @@ async function main() {
     create: {
       email: collaborator.email,
       active: true,
+      isAiLearningSource: false,
       note: "Technical seed user",
       invitedByUserId: reviewer.id,
     },

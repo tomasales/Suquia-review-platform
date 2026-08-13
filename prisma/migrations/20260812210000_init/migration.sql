@@ -29,7 +29,8 @@ CREATE TYPE "DriveSyncStatus" AS ENUM ('CONNECTED', 'CHECKING', 'PROBLEM');
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
-    "displayName" TEXT NOT NULL,
+    "name" TEXT,
+    "emailVerified" TIMESTAMP(3),
     "image" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "isAiLearningSource" BOOLEAN NOT NULL DEFAULT false,
@@ -45,12 +46,48 @@ CREATE TABLE "AuthorizedEmail" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
+    "isAiLearningSource" BOOLEAN NOT NULL DEFAULT false,
     "note" TEXT,
     "invitedByUserId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "AuthorizedEmail_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Account" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "provider" TEXT NOT NULL,
+    "providerAccountId" TEXT NOT NULL,
+    "refresh_token" TEXT,
+    "access_token" TEXT,
+    "expires_at" INTEGER,
+    "token_type" TEXT,
+    "scope" TEXT,
+    "id_token" TEXT,
+    "session_state" TEXT,
+
+    CONSTRAINT "Account_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Session" (
+    "id" TEXT NOT NULL,
+    "sessionToken" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "expires" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "VerificationToken" (
+    "identifier" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "expires" TIMESTAMP(3) NOT NULL
 );
 
 -- CreateTable
@@ -304,7 +341,28 @@ CREATE UNIQUE INDEX "AuthorizedEmail_email_key" ON "AuthorizedEmail"("email");
 CREATE INDEX "AuthorizedEmail_active_idx" ON "AuthorizedEmail"("active");
 
 -- CreateIndex
+CREATE INDEX "AuthorizedEmail_isAiLearningSource_idx" ON "AuthorizedEmail"("isAiLearningSource");
+
+-- CreateIndex
 CREATE INDEX "AuthorizedEmail_invitedByUserId_idx" ON "AuthorizedEmail"("invitedByUserId");
+
+-- CreateIndex
+CREATE INDEX "Account_userId_idx" ON "Account"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Account_provider_providerAccountId_key" ON "Account"("provider", "providerAccountId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Session_sessionToken_key" ON "Session"("sessionToken");
+
+-- CreateIndex
+CREATE INDEX "Session_userId_idx" ON "Session"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "VerificationToken_token_key" ON "VerificationToken"("token");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "VerificationToken_identifier_token_key" ON "VerificationToken"("identifier", "token");
 
 -- CreateIndex
 CREATE INDEX "Delivery_type_idx" ON "Delivery"("type");
@@ -479,6 +537,12 @@ CREATE INDEX "SystemConfiguration_updatedByUserId_idx" ON "SystemConfiguration"(
 
 -- AddForeignKey
 ALTER TABLE "AuthorizedEmail" ADD CONSTRAINT "AuthorizedEmail_invitedByUserId_fkey" FOREIGN KEY ("invitedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Delivery" ADD CONSTRAINT "Delivery_createdByUserId_fkey" FOREIGN KEY ("createdByUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

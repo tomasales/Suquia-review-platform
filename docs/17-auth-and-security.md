@@ -11,6 +11,14 @@ Diseñar una estrategia simple para login con Google, usuarios autorizados, iden
 - Proteger rutas de app y APIs desde backend/middleware.
 - No implementar usuario/password propio.
 
+## Implementación inicial
+
+- Se usa `next-auth` estable con Google como único provider.
+- Se usa Prisma Adapter oficial compatible con la versión estable instalada.
+- La estrategia de sesión es `database`; las sesiones se guardan en PostgreSQL.
+- Los modelos técnicos agregados para Auth.js son `Account`, `Session` y `VerificationToken`.
+- `User.name` reemplaza a `displayName` para mantener compatibilidad nativa con Auth.js sin duplicar campos.
+
 ## Usuarios autorizados
 
 ### Recomendación técnica
@@ -32,6 +40,18 @@ Usar una allowlist de emails en DB (`AuthorizedEmail`) y validarla durante el ca
 
 La decisión de producto sobre cómo administrar altas/bajas de usuarios sigue abierta. La arquitectura recomienda allowlist porque es el mecanismo técnico más simple para MVP.
 
+Implementación:
+
+1. Google devuelve identidad.
+2. El email se normaliza con `trim().toLowerCase()`.
+3. Si Google informa `email_verified=false`, el acceso se rechaza.
+4. El email debe existir en `AuthorizedEmail` con `active=true`.
+5. Si existe `User` con `isActive=false`, el acceso se rechaza aunque la allowlist siga activa.
+6. Auth.js crea o actualiza usuario, cuenta y sesión en PostgreSQL.
+7. En el evento de sign-in se actualizan `lastLoginAt` e `isAiLearningSource`.
+
+La unicidad case-insensitive se resuelve inicialmente por normalización en la aplicación antes de persistir o comparar emails. No se agrega extensión PostgreSQL ni índice funcional en este módulo.
+
 ## Identificación confiable de Tomi
 
 No hardcodear condiciones distribuidas como `if email == "...Tomi..."`.
@@ -39,17 +59,21 @@ No hardcodear condiciones distribuidas como `if email == "...Tomi..."`.
 Recomendación:
 
 - campo central `User.isAiLearningSource`;
+- campo de bootstrap `AuthorizedEmail.isAiLearningSource`;
 - como máximo un usuario activo con ese flag al inicio;
 - el job de AI Memory consulta ese flag al crear procesamiento;
 - Journal registra cambios de esta configuración si se habilita edición.
 
 Esto no es un rol complejo. Es una propiedad funcional específica para definir qué feedback alimenta aprendizaje creativo.
 
+Para autorizar el primer usuario real se debe crear un registro en `AuthorizedEmail` con el email normalizado y `active=true` antes del primer login. Si ese usuario debe alimentar AI Memory, marcar también `isAiLearningSource=true`. Esto puede hacerse con Prisma Studio o con un seed local no versionado; no se commitean emails reales.
+
 ## Sesiones
 
 - Sesiones gestionadas por Auth.js.
 - Cookies seguras en producción.
 - `AUTH_SECRET` obligatorio.
+- `NEXTAUTH_URL`/`AUTH_URL` configurado según entorno para callbacks OAuth.
 - Expiración razonable y renovación según defaults de Auth.js, a ajustar en implementación.
 
 ## Protección de rutas y APIs
@@ -58,6 +82,8 @@ Esto no es un rol complejo. Es una propiedad funcional específica para definir 
 - Toda API mutante requiere sesión y usuario autorizado.
 - Las acciones mutantes validan ownership funcional cuando aplique, aunque todos tengan permisos amplios en MVP.
 - No confiar en datos enviados por frontend para `actorUserId`; tomarlo de sesión.
+
+Next.js 16 usa `proxy.ts` para la capa temprana de routing. La implementación usa `proxy.ts` para redirigir rutas privadas sin cookie de sesión hacia `/login`, y valida la sesión real server-side con Auth.js/Prisma en los helpers reutilizables antes de renderizar la aplicación. Los endpoints de Auth.js y `/login` son públicos.
 
 ## Uploads
 
@@ -89,6 +115,11 @@ Guardar como variables de entorno en Render:
 - email/configuración para alertas graves si se implementa.
 
 No commitear credenciales.
+
+Google Cloud Console debe configurar un OAuth Client con redirect URIs autorizadas:
+
+- local: `http://localhost:3000/api/auth/callback/google`;
+- producción: `https://<dominio-produccion>/api/auth/callback/google`.
 
 ## Credenciales Google Drive
 

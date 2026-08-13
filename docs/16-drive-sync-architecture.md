@@ -112,7 +112,7 @@ Schema conceptual:
     {
       "id": "...",
       "email": "...",
-      "displayName": "..."
+      "name": "..."
     }
   ],
   "pieces": [

@@ -11,13 +11,16 @@ import {
   journalEvents,
   recentDeliveries,
 } from "@/lib/mock-data";
+import { requireAuthorizedUser } from "@/lib/session";
 
-export default function Home() {
+export default async function Home() {
+  const user = await requireAuthorizedUser();
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AppSidebar />
       <div className="min-h-screen lg:pl-[var(--sidebar-width)]">
-        <AppHeader />
+        <AppHeader user={user} />
         <main className="px-4 py-5 sm:px-6 lg:px-8">
           <PageHeader
             title="Dashboard"
