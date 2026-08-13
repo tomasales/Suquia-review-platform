@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { SyncOperationStatus } from "@prisma/client";
+import { FeedbackLevel, FeedbackSourceType, SyncOperationStatus } from "@prisma/client";
 
 import {
   buildDeliveryFolderAppProperties,
@@ -10,12 +10,14 @@ import {
   buildPieceFolderAppProperties,
   buildPieceMetadata,
   buildPieceVersionAssetAppProperties,
+  buildPieceVersionFeedbackAppProperties,
   buildPieceVersionFolderAppProperties,
   getDeliveryFolderName,
   getPieceFolderName,
   getPieceVersionAssetRelativePath,
   getPieceVersionFolderName,
   serializeJournalJsonl,
+  serializeVersionFeedbackJsonl,
   serializeJsonForDrive,
   type DeliveryBackupSnapshot,
 } from "./backup-format";
@@ -34,6 +36,7 @@ import {
   getOldestFailedDriveBackupQuery,
   getOldestPendingDriveBackupQuery,
 } from "./operation-selection";
+import { resolveDriveBackupRefreshAction } from "./enqueue-rules";
 
 const createdAt = new Date("2026-08-13T12:00:00.000Z");
 const exportedAt = new Date("2026-08-13T13:00:00.000Z");
@@ -41,6 +44,11 @@ const user = {
   email: "visual-review@suquia.local",
   id: "user-1",
   name: "Tomi Preview",
+};
+const feedbackAuthor = {
+  email: "designer@suquia.local",
+  id: "user-2",
+  name: "Diseño SUQUIA",
 };
 const snapshot: DeliveryBackupSnapshot = {
   delivery: {
@@ -57,6 +65,34 @@ const snapshot: DeliveryBackupSnapshot = {
     type: "STORIES",
     updatedAt: createdAt,
   },
+  feedback: [
+    {
+      author: feedbackAuthor,
+      authorUserId: feedbackAuthor.id,
+      body: "Ajustar el CTA y mantener el fondo.",
+      createdAt: new Date("2026-08-13T12:10:00.000Z"),
+      deliveryId: "delivery-1",
+      id: "feedback-2",
+      level: FeedbackLevel.PIECE,
+      pieceId: "piece-1",
+      pieceVersionId: "version-1",
+      sourceType: FeedbackSourceType.OTHER,
+      updatedAt: new Date("2026-08-13T12:10:05.000Z"),
+    },
+    {
+      author: user,
+      authorUserId: user.id,
+      body: "OK para publicar.",
+      createdAt: new Date("2026-08-13T12:10:00.000Z"),
+      deliveryId: "delivery-1",
+      id: "feedback-1",
+      level: FeedbackLevel.PIECE,
+      pieceId: "piece-1",
+      pieceVersionId: "version-1",
+      sourceType: FeedbackSourceType.TOMI,
+      updatedAt: new Date("2026-08-13T12:10:00.000Z"),
+    },
+  ],
   journalEvents: [
     {
       actor: user,
@@ -137,6 +173,17 @@ assert.deepEqual(
     suquiaEntityType: "piece-version-asset",
   },
 );
+assert.deepEqual(
+  buildPieceVersionFeedbackAppProperties({
+    deliveryId: "delivery-1",
+    pieceVersionId: "version-1",
+  }),
+  {
+    suquiaDeliveryId: "delivery-1",
+    suquiaEntityId: "version-1",
+    suquiaEntityType: "piece-version-feedback",
+  },
+);
 assert.deepEqual(buildDeliveryManifestAppProperties("delivery-1"), {
   suquiaEntityId: "delivery-1",
   suquiaEntityType: "delivery-manifest",
@@ -174,19 +221,33 @@ const metadata = buildPieceMetadata({
 assert.equal(metadata.schemaVersion, 1);
 assert.equal(metadata.versions[0].driveFileId, "drive-version-file");
 assert.equal(metadata.versions[0].fileSizeBytes, 2048);
+assert.equal(metadata.piece.reviewState, "OK");
 
 const manifest = buildDeliveryManifest({ driveIds, exportedAt, snapshot });
 assert.equal(manifest.schemaVersion, 1);
 assert.equal(manifest.delivery.driveManifestFileId, "drive-manifest");
 assert.equal(manifest.journal.driveFileId, "drive-journal");
 assert.equal(manifest.pieces[0].versions[0].driveFileId, "drive-version-file");
-assert.equal(manifest.feedback.length, 0);
+assert.equal(manifest.feedback.length, 2);
+assert.equal(manifest.feedback[0].id, "feedback-2");
+assert.equal(manifest.feedback[0].pieceVersionId, "version-1");
+assert.equal(manifest.feedback[0].sourceType, FeedbackSourceType.OTHER);
+assert.equal(manifest.feedback[0].body, "Ajustar el CTA y mantener el fondo.");
+assert.deepEqual(manifest.feedback[0].attachmentIds, []);
+assert.deepEqual(
+  manifest.users.map((item) => item.id),
+  ["user-1", "user-2"],
+);
 assert.equal(manifest.attachments.length, 0);
 assert.match(serializeJsonForDrive(manifest), /"schemaVersion": 1,/);
 
 assert.equal(
   serializeJournalJsonl(snapshot.journalEvents),
   '{"actorUserId":"user-1","createdAt":"2026-08-13T12:00:00.000Z","deliveryId":"delivery-1","entityId":"delivery-1","entityType":"DELIVERY","eventType":"DELIVERY_SUBMITTED","id":"journal-1","metadata":{"pieceCount":1}}\n',
+);
+assert.equal(
+  serializeVersionFeedbackJsonl(snapshot.feedback),
+  '{"authorUserId":"user-1","body":"OK para publicar.","createdAt":"2026-08-13T12:10:00.000Z","id":"feedback-1","level":"PIECE","pieceId":"piece-1","pieceVersionId":"version-1","sourceType":"TOMI","updatedAt":"2026-08-13T12:10:00.000Z"}\n{"authorUserId":"user-2","body":"Ajustar el CTA y mantener el fondo.","createdAt":"2026-08-13T12:10:00.000Z","id":"feedback-2","level":"PIECE","pieceId":"piece-1","pieceVersionId":"version-1","sourceType":"OTHER","updatedAt":"2026-08-13T12:10:05.000Z"}\n',
 );
 
 assert.equal(canStartDriveBackup(SyncOperationStatus.PENDING), true);
@@ -261,6 +322,48 @@ assert.equal(
 assert.notEqual(
   getOldestPendingDriveBackupQuery().where.status,
   getOldestFailedDriveBackupQuery().where.status,
+);
+
+assert.equal(resolveDriveBackupRefreshAction([]), null);
+assert.equal(
+  resolveDriveBackupRefreshAction([
+    { id: "synced-1", status: SyncOperationStatus.SYNCED },
+  ]),
+  null,
+);
+assert.deepEqual(
+  resolveDriveBackupRefreshAction([
+    { id: "pending-1", status: SyncOperationStatus.PENDING },
+  ]),
+  {
+    action: "reused-pending",
+    syncOperationId: "pending-1",
+  },
+);
+assert.deepEqual(
+  resolveDriveBackupRefreshAction([
+    { id: "failed-1", status: SyncOperationStatus.FAILED },
+  ]),
+  {
+    action: "blocked-by-failed",
+    syncOperationId: "failed-1",
+  },
+);
+assert.equal(
+  resolveDriveBackupRefreshAction([
+    { id: "syncing-1", status: SyncOperationStatus.SYNCING },
+  ]),
+  null,
+);
+assert.deepEqual(
+  resolveDriveBackupRefreshAction([
+    { id: "syncing-1", status: SyncOperationStatus.SYNCING },
+    { id: "pending-2", status: SyncOperationStatus.PENDING },
+  ]),
+  {
+    action: "reused-pending",
+    syncOperationId: "pending-2",
+  },
 );
 
 console.log("drive unit tests passed");

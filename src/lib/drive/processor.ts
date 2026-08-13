@@ -13,6 +13,7 @@ import {
   buildPieceFolderAppProperties,
   buildPieceMetadata,
   buildPieceVersionAssetAppProperties,
+  buildPieceVersionFeedbackAppProperties,
   buildPieceVersionFolderAppProperties,
   buildPieceVersionsFolderAppProperties,
   DRIVE_BACKUP_OPERATION_TYPE,
@@ -21,7 +22,9 @@ import {
   getPieceVersionFolderName,
   getPieceVersionsFolderName,
   serializeJournalJsonl,
+  serializeVersionFeedbackJsonl,
   serializeJsonForDrive,
+  type BackupFeedback,
   type ManifestDriveIds,
 } from "./backup-format";
 import { getDeliveryBackupSnapshot } from "./backup-snapshot";
@@ -300,6 +303,21 @@ async function backupDeliveryToDrive(deliveryId: string) {
           },
         });
       }
+
+      const versionFeedback = getFeedbackForVersion(snapshot.feedback, version.id);
+
+      if (versionFeedback.length > 0) {
+        await createOrUpdateTextFile({
+          appProperties: buildPieceVersionFeedbackAppProperties({
+            deliveryId,
+            pieceVersionId: version.id,
+          }),
+          content: serializeVersionFeedbackJsonl(versionFeedback),
+          mimeType: "application/x-ndjson",
+          name: "feedback.jsonl",
+          parentId: versionFolder.id,
+        });
+      }
     }
 
     await createOrUpdateTextFile({
@@ -365,6 +383,15 @@ async function backupDeliveryToDrive(deliveryId: string) {
     deliveryFolderId: deliveryFolder.id,
     manifestFileId: initialManifestFile.id,
   };
+}
+
+function getFeedbackForVersion(
+  feedbackItems: BackupFeedback[],
+  pieceVersionId: string,
+) {
+  return feedbackItems.filter(
+    (feedback) => feedback.pieceVersionId === pieceVersionId,
+  );
 }
 
 function getTypeParentFolderId(type: DeliveryType) {

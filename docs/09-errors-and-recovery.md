@@ -37,6 +37,8 @@ El shell de la aplicación muestra:
 
 Las operaciones `PENDING` pueden procesarse oportunísticamente cuando Drive está accesible. Las operaciones `FAILED` nunca se reintentan automáticamente: requieren acción manual.
 
+Las mutaciones de revisión y feedback guardan primero en PostgreSQL y registran una obligación de refresh Drive como `SyncOperation` coalesced. Si ya existe una operación `FAILED` para esa entrega, no se crea una nueva `PENDING`; el usuario puede guardar su trabajo y el retry manual tomará el snapshot actual completo cuando se ejecute.
+
 ## Journal
 
 Registrar en Journal:

@@ -27,6 +27,16 @@ export function parsePieceReviewState(value: unknown) {
   return value;
 }
 
+export function isPieceReviewStateNoop({
+  currentState,
+  nextState,
+}: {
+  currentState: PieceReviewState | null;
+  nextState: PieceReviewState;
+}) {
+  return currentState === nextState;
+}
+
 export function normalizeFeedbackBody(value: unknown) {
   if (typeof value !== "string") {
     throw new PieceReviewValidationError("Feedback inválido.");

@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { useDriveRuntime } from "@/components/drive/drive-runtime";
 import { useToast } from "@/components/ui/toast";
 import type { DeliveryDetail } from "@/lib/deliveries";
 
@@ -27,6 +28,7 @@ export function PieceReviewExperience({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const driveRuntime = useDriveRuntime();
   const { showToast } = useToast();
   const [reviewOverrides, setReviewOverrides] = useState<
     Record<string, ReviewState>
@@ -140,6 +142,7 @@ export function PieceReviewExperience({
         throw new Error("Review request failed.");
       }
 
+      void driveRuntime.notifyBackupPending();
       router.refresh();
     } catch {
       setReviewOverride(selectedPiece.id, previousReviewState);
@@ -211,6 +214,7 @@ export function PieceReviewExperience({
 
       addFeedbackOverride(selectedVersion.id, result.feedback);
       setDrafts((current) => ({ ...current, [draftKey]: "" }));
+      void driveRuntime.notifyBackupPending();
       router.refresh();
     } catch {
       showToast({

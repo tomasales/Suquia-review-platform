@@ -69,9 +69,10 @@ El nombre visible puede incluir el título generado para lectura humana, pero el
       /versions
         /V1-<pieceVersionId>
           original-file
+          feedback.jsonl
 ```
 
-El motor inicial no crea todavía `feedback-general.jsonl`, `feedback.jsonl`, referencias, V2 ni carpetas vacías para features futuras. La convención final de nombres sigue pendiente. La arquitectura exige que los IDs inmutables estén en manifest.
+El motor inicial crea `feedback.jsonl` únicamente cuando esa versión tiene feedback real. No crea todavía `feedback-general.jsonl`, referencias, V2 ni carpetas vacías para features futuras. La convención final de nombres sigue pendiente. La arquitectura exige que los IDs inmutables estén en manifest.
 
 ## Storage operativo y uploads
 
@@ -153,6 +154,7 @@ Identidades principales:
 - Asset: `suquiaEntityType=piece-version-asset`, `suquiaEntityId=<pieceVersionId>`, `suquiaDeliveryId=<deliveryId>`.
 - Manifest: `suquiaEntityType=delivery-manifest`, `suquiaEntityId=<deliveryId>`.
 - Journal: `suquiaEntityType=delivery-journal`, `suquiaEntityId=<deliveryId>`.
+- Feedback por versión: `suquiaEntityType=piece-version-feedback`, `suquiaEntityId=<pieceVersionId>`, `suquiaDeliveryId=<deliveryId>`.
 
 Los IDs se persisten progresivamente en PostgreSQL:
 
@@ -222,7 +224,8 @@ Schema conceptual:
       "level": "PIECE",
       "body": "...",
       "createdAt": "...",
-      "attachmentIds": ["..."]
+      "updatedAt": "...",
+      "attachmentIds": []
     }
   ],
   "attachments": [
@@ -250,6 +253,20 @@ Dependencias abiertas:
 - estado de pieza al subir nueva versión;
 - convención final de nombres;
 - estado de entrega restaurada.
+
+## Refresh incremental por revisión y feedback
+
+No existe un sync separado para review o feedback. Las mutaciones reales de `Piece.reviewState`, `Delivery.status` y `Feedback` crean o reutilizan una `SyncOperation` de tipo `DRIVE_BACKUP_DELIVERY`, porque el processor siempre vuelve a leer PostgreSQL y escribe un snapshot canónico actual.
+
+Reglas de coalescing:
+
+- si ya existe una operación `PENDING` para esa Delivery, se reutiliza;
+- si existe una operación `FAILED`, no se crea una nueva `PENDING` automáticamente;
+- si existe una operación `SYNCING` y no hay `PENDING`, se crea una única `PENDING` posterior;
+- si solo hay operaciones `SYNCED` históricas, se crea una nueva `PENDING`;
+- los eventos `DRIVE_BACKUP_SYNCED` y `DRIVE_BACKUP_FAILED` no encolan otro backup.
+
+El processor actualiza `metadata.json`, `manifest.json`, `journal.jsonl` y los `feedback.jsonl` por versión. Los assets originales se crean con identidad estable y no se vuelven a subir si `PieceVersion.driveFileId` sigue existiendo.
 
 ## deleted_entries.json
 

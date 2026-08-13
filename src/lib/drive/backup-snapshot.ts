@@ -15,6 +15,18 @@ export async function getDeliveryBackupSnapshot(deliveryId: string) {
           name: true,
         },
       },
+      feedback: {
+        include: {
+          author: {
+            select: {
+              email: true,
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
       journalEvents: {
         include: {
           actor: {
@@ -71,6 +83,19 @@ export async function getDeliveryBackupSnapshot(deliveryId: string) {
       type: delivery.type,
       updatedAt: delivery.updatedAt,
     },
+    feedback: delivery.feedback.map((feedback) => ({
+      author: feedback.author,
+      authorUserId: feedback.authorUserId,
+      body: feedback.body,
+      createdAt: feedback.createdAt,
+      deliveryId: feedback.deliveryId,
+      id: feedback.id,
+      level: feedback.level,
+      pieceId: feedback.pieceId,
+      pieceVersionId: feedback.pieceVersionId,
+      sourceType: feedback.sourceType,
+      updatedAt: feedback.updatedAt,
+    })),
     journalEvents: delivery.journalEvents.map((event) => ({
       actor: event.actor,
       actorUserId: event.actorUserId,

@@ -12,6 +12,7 @@ import {
   getDeliveryStatusAfterFeedback,
   getDeliveryStatusAfterPieceReview,
   getFeedbackSourceType,
+  isPieceReviewStateNoop,
   normalizeFeedbackBody,
   parsePieceReviewState,
 } from "@/lib/piece-review-rules";
@@ -22,6 +23,20 @@ assert.equal(
   PieceReviewState.NEEDS_CHANGES,
 );
 assert.throws(() => parsePieceReviewState("PENDING"));
+assert.equal(
+  isPieceReviewStateNoop({
+    currentState: PieceReviewState.OK,
+    nextState: PieceReviewState.OK,
+  }),
+  true,
+);
+assert.equal(
+  isPieceReviewStateNoop({
+    currentState: null,
+    nextState: PieceReviewState.OK,
+  }),
+  false,
+);
 
 assert.equal(normalizeFeedbackBody("  Ajustar CTA.  "), "Ajustar CTA.");
 assert.throws(() => normalizeFeedbackBody("   "));

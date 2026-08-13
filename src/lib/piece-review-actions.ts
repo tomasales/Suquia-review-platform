@@ -3,6 +3,7 @@ import "server-only";
 import { FeedbackLevel } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { enqueueDriveBackupRefresh } from "@/lib/drive/enqueue";
 import {
   assertDeliveryCanBeReviewed,
   buildDeliveryStatusJournalMetadata,
@@ -11,6 +12,7 @@ import {
   getDeliveryStatusAfterFeedback,
   getDeliveryStatusAfterPieceReview,
   getFeedbackSourceType,
+  isPieceReviewStateNoop,
   normalizeFeedbackBody,
   parsePieceReviewState,
   PieceReviewValidationError,
@@ -71,7 +73,12 @@ export async function updatePieceReviewState({
 
   assertDeliveryCanBeReviewed(piece.delivery.status);
 
-  if (piece.reviewState === nextReviewState) {
+  if (
+    isPieceReviewStateNoop({
+      currentState: piece.reviewState,
+      nextState: nextReviewState,
+    })
+  ) {
     return {
       delivery: {
         id: piece.delivery.id,
@@ -143,6 +150,14 @@ export async function updatePieceReviewState({
         },
       });
     }
+
+    await enqueueDriveBackupRefresh(tx, {
+      createdByUserId: userId,
+      deliveryId: piece.delivery.id,
+      entityId: piece.id,
+      entityType: "PIECE",
+      reason: "piece-review",
+    });
   });
 
   return {
@@ -276,6 +291,14 @@ export async function addPieceFeedback({
         },
       });
     }
+
+    await enqueueDriveBackupRefresh(tx, {
+      createdByUserId: user.id,
+      deliveryId: piece.delivery.id,
+      entityId: feedback.id,
+      entityType: "FEEDBACK",
+      reason: "feedback-added",
+    });
 
     return feedback;
   });

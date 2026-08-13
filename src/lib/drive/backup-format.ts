@@ -1,6 +1,8 @@
 import type {
   DeliveryStatus,
   DeliveryType,
+  FeedbackLevel,
+  FeedbackSourceType,
   PieceReviewState,
 } from "@prisma/client";
 
@@ -55,6 +57,20 @@ export type BackupJournalEvent = {
   metadata: unknown;
 };
 
+export type BackupFeedback = {
+  author: BackupUser;
+  authorUserId: string;
+  body: string;
+  createdAt: Date;
+  deliveryId: string;
+  id: string;
+  level: FeedbackLevel;
+  pieceId: string | null;
+  pieceVersionId: string | null;
+  sourceType: FeedbackSourceType;
+  updatedAt: Date;
+};
+
 export type DeliveryBackupSnapshot = {
   delivery: {
     createdAt: Date;
@@ -70,6 +86,7 @@ export type DeliveryBackupSnapshot = {
     type: DeliveryType;
     updatedAt: Date;
   };
+  feedback: BackupFeedback[];
   journalEvents: BackupJournalEvent[];
   pieces: BackupPiece[];
 };
@@ -144,6 +161,20 @@ export function buildPieceVersionAssetAppProperties({
     suquiaDeliveryId: deliveryId,
     suquiaEntityId: pieceVersionId,
     suquiaEntityType: "piece-version-asset",
+  };
+}
+
+export function buildPieceVersionFeedbackAppProperties({
+  deliveryId,
+  pieceVersionId,
+}: {
+  deliveryId: string;
+  pieceVersionId: string;
+}): DriveAppProperties {
+  return {
+    suquiaDeliveryId: deliveryId,
+    suquiaEntityId: pieceVersionId,
+    suquiaEntityType: "piece-version-feedback",
   };
 }
 
@@ -303,7 +334,19 @@ export function buildDeliveryManifest({
         versionNumber: version.versionNumber,
       })),
     })),
-    feedback: [],
+    feedback: snapshot.feedback.map((feedback) => ({
+      attachmentIds: [],
+      authorUserId: feedback.authorUserId,
+      body: feedback.body,
+      createdAt: feedback.createdAt.toISOString(),
+      deliveryId: feedback.deliveryId,
+      id: feedback.id,
+      level: feedback.level,
+      pieceId: feedback.pieceId,
+      pieceVersionId: feedback.pieceVersionId,
+      sourceType: feedback.sourceType,
+      updatedAt: feedback.updatedAt.toISOString(),
+    })),
     attachments: [],
     journal: {
       driveFileId: driveIds.journalFileId,
@@ -338,6 +381,26 @@ export function serializeJournalJsonl(events: BackupJournalEvent[]) {
     .concat(events.length > 0 ? "\n" : "");
 }
 
+export function serializeVersionFeedbackJsonl(feedbackItems: BackupFeedback[]) {
+  return [...feedbackItems]
+    .sort(compareFeedbackForBackup)
+    .map((feedback) =>
+      JSON.stringify({
+        authorUserId: feedback.authorUserId,
+        body: feedback.body,
+        createdAt: feedback.createdAt.toISOString(),
+        id: feedback.id,
+        level: feedback.level,
+        pieceId: feedback.pieceId,
+        pieceVersionId: feedback.pieceVersionId,
+        sourceType: feedback.sourceType,
+        updatedAt: feedback.updatedAt.toISOString(),
+      }),
+    )
+    .join("\n")
+    .concat(feedbackItems.length > 0 ? "\n" : "");
+}
+
 function collectManifestUsers(snapshot: DeliveryBackupSnapshot) {
   const users = new Map<string, BackupUser>();
 
@@ -355,7 +418,21 @@ function collectManifestUsers(snapshot: DeliveryBackupSnapshot) {
     }
   }
 
+  for (const feedback of snapshot.feedback) {
+    users.set(feedback.author.id, feedback.author);
+  }
+
   return Array.from(users.values()).sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function compareFeedbackForBackup(a: BackupFeedback, b: BackupFeedback) {
+  const dateComparison = a.createdAt.getTime() - b.createdAt.getTime();
+
+  if (dateComparison !== 0) {
+    return dateComparison;
+  }
+
+  return a.id.localeCompare(b.id);
 }
 
 function padPiecePosition(position: number) {

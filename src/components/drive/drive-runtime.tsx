@@ -27,6 +27,7 @@ type DriveRuntimeContextValue = DriveStatusResponse & {
   checkNow: (options?: DriveRuntimeOptions) => Promise<void>;
   isChecking: boolean;
   isProcessing: boolean;
+  notifyBackupPending: () => Promise<void>;
   refreshStatus: () => Promise<DriveStatusResponse | null>;
   retryFailed: () => Promise<void>;
 };
@@ -203,6 +204,21 @@ export function DriveRuntimeProvider({
     }
   }, [refreshStatus, showToast, visualReviewMode]);
 
+  const notifyBackupPending = useCallback(async () => {
+    if (visualReviewMode) {
+      return;
+    }
+
+    const nextStatus = await refreshStatus();
+
+    if (
+      nextStatus?.drive.status === "CONNECTED" &&
+      nextStatus.backups.pending > 0
+    ) {
+      await processPending();
+    }
+  }, [processPending, refreshStatus, visualReviewMode]);
+
   useEffect(() => {
     if (visualReviewMode) {
       return;
@@ -291,6 +307,7 @@ export function DriveRuntimeProvider({
       checkNow,
       isChecking,
       isProcessing,
+      notifyBackupPending,
       refreshStatus,
       retryFailed,
     }),
@@ -298,6 +315,7 @@ export function DriveRuntimeProvider({
       checkNow,
       isChecking,
       isProcessing,
+      notifyBackupPending,
       refreshStatus,
       retryFailed,
       status,

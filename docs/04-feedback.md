@@ -30,6 +30,8 @@ El feedback por pieza debe soportar:
 
 La fuente operativa del feedback se determina desde el usuario autenticado: si `User.isAiLearningSource` es verdadero, se guarda como `TOMI`; en caso contrario, como `OTHER`. No se infiere `DIRECTION` automáticamente desde el navegador.
 
+El backup de Drive exporta el feedback real dentro del `manifest.json` de la entrega y, cuando una versión tiene feedback, también escribe un `feedback.jsonl` dentro de la carpeta de esa `PieceVersion`. El archivo se regenera desde PostgreSQL como snapshot canónica, no como append remoto incremental.
+
 ## Decisiones tomadas
 
 - No implementar pins o coordenadas sobre la imagen en MVP.
