@@ -11,7 +11,6 @@ import {
   StickyNote,
   Trash2,
   Upload,
-  X,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -40,10 +39,6 @@ type UploadPiece = {
   previewError: boolean;
   previewUrl: string;
 };
-
-type PendingTypeChange = {
-  nextType: DeliveryType;
-} | null;
 
 type DeliveryUploadFlowProps = {
   visualReviewMode: boolean;
@@ -127,8 +122,6 @@ export function DeliveryUploadFlow({
   const [generalNote, setGeneralNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pieces, setPieces] = useState<UploadPiece[]>([]);
-  const [pendingTypeChange, setPendingTypeChange] =
-    useState<PendingTypeChange>(null);
 
   useEffect(() => {
     piecesRef.current = pieces;
@@ -143,18 +136,26 @@ export function DeliveryUploadFlow({
   const piecesWithNotes = pieces.filter((piece) => piece.note.trim()).length;
   const canSubmit = Boolean(deliveryType && pieces.length > 0);
   const aspectClass =
-    deliveryType === "STORIES" ? "aspect-[9/16]" : "aspect-square";
+    deliveryType === "STORIES"
+      ? "aspect-[9/16]"
+      : deliveryType === "FEED"
+        ? "aspect-square"
+        : "min-h-[220px]";
   const summary = `${getTypeLabel(deliveryType)} · ${pieces.length} ${
     pieces.length === 1 ? "pieza" : "piezas"
   }`;
 
   const submitDescription = useMemo(() => {
+    if (!deliveryType && pieces.length === 0) {
+      return "Elegí tipo y agregá piezas para entregar.";
+    }
+
     if (!deliveryType) {
-      return "Elegí Stories o Feed.";
+      return "Elegí Stories o Feed para entregar.";
     }
 
     if (pieces.length === 0) {
-      return "Agregá al menos una pieza.";
+      return "Agregá al menos una pieza para entregar.";
     }
 
     if (!visualReviewMode) {
@@ -202,25 +203,7 @@ export function DeliveryUploadFlow({
       return;
     }
 
-    if (pieces.length > 0) {
-      setPendingTypeChange({ nextType });
-      return;
-    }
-
     setDeliveryType(nextType);
-  }
-
-  function confirmTypeChange() {
-    if (!pendingTypeChange) {
-      return;
-    }
-
-    pieces.forEach((piece) => URL.revokeObjectURL(piece.previewUrl));
-    setPieces([]);
-    setErrors([]);
-    setGeneralNote("");
-    setDeliveryType(pendingTypeChange.nextType);
-    setPendingTypeChange(null);
   }
 
   function removePiece(pieceId: string) {
@@ -309,22 +292,12 @@ export function DeliveryUploadFlow({
 
   function handleDropzoneDragOver(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-
-    if (!deliveryType) {
-      return;
-    }
-
     setDragOverDropzone(true);
   }
 
   function handleDropzoneDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setDragOverDropzone(false);
-
-    if (!deliveryType) {
-      return;
-    }
-
     addFiles(event.dataTransfer.files);
   }
 
@@ -444,7 +417,6 @@ export function DeliveryUploadFlow({
             action={
               pieces.length > 0 ? (
                 <Button
-                  disabled={!deliveryType}
                   onClick={() => inputRef.current?.click()}
                   size="sm"
                   variant="secondary"
@@ -470,7 +442,7 @@ export function DeliveryUploadFlow({
                   dragOverDropzone
                     ? "border-foreground bg-surface-muted"
                     : "border-border bg-background"
-                } ${deliveryType ? "" : "opacity-70"}`}
+                }`}
                 onDragLeave={() => setDragOverDropzone(false)}
                 onDragOver={handleDropzoneDragOver}
                 onDrop={handleDropzoneDrop}
@@ -488,17 +460,11 @@ export function DeliveryUploadFlow({
                   </p>
                   <Button
                     className="mt-4 min-h-11 px-5"
-                    disabled={!deliveryType}
                     onClick={() => inputRef.current?.click()}
                     variant="secondary"
                   >
                     Seleccionar piezas
                   </Button>
-                  {!deliveryType ? (
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      Primero elegí Stories o Feed.
-                    </p>
-                  ) : null}
                 </div>
               </div>
             ) : (
@@ -609,44 +575,6 @@ export function DeliveryUploadFlow({
           </Surface>
         </aside>
       </div>
-
-      {pendingTypeChange ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/24 p-3 sm:items-center sm:justify-center">
-          <div
-            aria-modal="true"
-            className="w-full max-w-md rounded-[var(--radius)] border border-border bg-surface p-4 shadow-[0_18px_60px_rgba(25,24,23,0.16)]"
-            role="dialog"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">
-                  Cambiar tipo
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Cambiar el tipo eliminará las piezas seleccionadas.
-                </p>
-              </div>
-              <button
-                aria-label="Cancelar cambio de tipo"
-                className="inline-flex size-9 items-center justify-center rounded-[8px] border border-border text-muted-foreground"
-                onClick={() => setPendingTypeChange(null)}
-                type="button"
-              >
-                <X className="size-4" strokeWidth={1.8} />
-              </button>
-            </div>
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button
-                onClick={() => setPendingTypeChange(null)}
-                variant="secondary"
-              >
-                Cancelar
-              </Button>
-              <Button onClick={confirmTypeChange}>Cambiar tipo</Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </>
   );
 }
