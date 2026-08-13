@@ -8,6 +8,8 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Readable } from "node:stream";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
 import { getR2Config } from "./config";
 import { StorageUploadError } from "./errors";
@@ -102,5 +104,48 @@ export async function deleteR2Object(storageKey: string) {
       Bucket: getBucketName(),
       Key: storageKey,
     }),
+  );
+}
+
+export async function getR2ObjectStream(storageKey: string) {
+  const response = await getR2Client().send(
+    new GetObjectCommand({
+      Bucket: getBucketName(),
+      Key: storageKey,
+    }),
+  );
+
+  const body = response.Body;
+
+  if (!body) {
+    throw new StorageUploadError("Could not read uploaded object.");
+  }
+
+  if (isNodeReadable(body)) {
+    return body;
+  }
+
+  const streamableBody = body as unknown as {
+    transformToWebStream?: () => unknown;
+  };
+
+  if (typeof streamableBody.transformToWebStream === "function") {
+    return Readable.fromWeb(
+      streamableBody.transformToWebStream() as NodeReadableStream<Uint8Array>,
+    );
+  }
+
+  if (body instanceof Uint8Array) {
+    return Readable.from(body);
+  }
+
+  throw new StorageUploadError("Could not read uploaded object.");
+}
+
+function isNodeReadable(value: unknown): value is Readable {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { pipe?: unknown }).pipe === "function"
   );
 }

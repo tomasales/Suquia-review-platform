@@ -87,6 +87,7 @@ Mínimas:
 - `DRIVE_ROOT_FOLDER_ID`;
 - `DRIVE_STORIES_FOLDER_ID`;
 - `DRIVE_FEED_FOLDER_ID`;
+- `DRIVE_SHARED_DRIVE_ID` si se usa Shared Drive para acotar búsquedas;
 - `LLM_PROVIDER`;
 - `LLM_API_KEY`;
 - `AI_MEMORY_SCHEMA_VERSION`;
@@ -138,6 +139,7 @@ No agregar plataforma compleja de observabilidad en MVP.
 - R2 requiere configurar CORS correctamente para uploads directos desde browser.
 - Jobs dentro del Web Service pueden pausarse si el servicio duerme.
 - Drive API puede fallar por permisos mal configurados aunque la app funcione.
+- `GOOGLE_SERVICE_ACCOUNT_JSON` debe guardarse como secreto server-side y nunca exponerse como `NEXT_PUBLIC_`.
 
 ## Cloudflare R2
 

@@ -5,6 +5,7 @@ import {
   createR2SignedReadUrl,
   createR2SignedUploadUrl,
   deleteR2Object,
+  getR2ObjectStream,
   headR2Object,
 } from "./r2";
 import {
@@ -154,4 +155,10 @@ export async function deleteObject(storageKey: string) {
   assertValidStorageKey(storageKey);
 
   await deleteR2Object(storageKey);
+}
+
+export async function getObjectStream(storageKey: string) {
+  assertValidStorageKey(storageKey);
+
+  return getR2ObjectStream(storageKey);
 }

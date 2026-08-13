@@ -36,6 +36,7 @@ Para modo real hacen falta, como mínimo:
 - `DATABASE_URL`
 - credenciales Google OAuth/Auth.js
 - variables Cloudflare R2
+- variables Google Drive para backup server-side
 - `DELIVERY_UPLOAD_SECRET`
 
 Variables R2:
@@ -49,7 +50,19 @@ R2_ENDPOINT=
 DELIVERY_UPLOAD_SECRET=
 ```
 
-El flujo real de **Nueva entrega** prepara IDs definitivos, emite un receipt firmado temporal, sube piezas directo desde el navegador a R2 con URLs firmadas, verifica los objetos, crea Delivery/Pieces/PieceVersion V1 en PostgreSQL, registra Journal y deja una SyncOperation pendiente para el backup futuro en Drive.
+Variables Drive:
+
+```bash
+GOOGLE_SERVICE_ACCOUNT_JSON=
+DRIVE_ROOT_FOLDER_ID=
+DRIVE_STORIES_FOLDER_ID=
+DRIVE_FEED_FOLDER_ID=
+DRIVE_SHARED_DRIVE_ID=
+```
+
+El flujo real de **Nueva entrega** prepara IDs definitivos, emite un receipt firmado temporal, sube piezas directo desde el navegador a R2 con URLs firmadas, verifica los objetos, crea Delivery/Pieces/PieceVersion V1 en PostgreSQL, registra Journal y deja una SyncOperation pendiente para el backup en Drive.
+
+El motor backend de Drive ya puede procesar esa SyncOperation bajo demanda mediante endpoints protegidos. El trigger automático y la UI completa de estado Drive todavía no están conectados.
 
 ## Visual review local
 

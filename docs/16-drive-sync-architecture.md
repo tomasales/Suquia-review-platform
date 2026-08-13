@@ -63,22 +63,15 @@ El nombre visible puede incluir el título generado para lectura humana, pero el
 /<Tipo>/<deliveryId>
   manifest.json
   journal.jsonl
-  feedback-general.jsonl
   /pieces
     /<piecePosition>-<pieceId>
       metadata.json
       /versions
         /V1-<pieceVersionId>
           original-file
-          feedback.jsonl
-          /references
-        /V2-<pieceVersionId>
-          original-file
-          feedback.jsonl
-          /references
 ```
 
-La convención final de nombres sigue pendiente. La arquitectura exige que los IDs inmutables estén en manifest.
+El motor inicial no crea todavía `feedback-general.jsonl`, `feedback.jsonl`, referencias, V2 ni carpetas vacías para features futuras. La convención final de nombres sigue pendiente. La arquitectura exige que los IDs inmutables estén en manifest.
 
 ## Storage operativo y uploads
 
@@ -101,6 +94,54 @@ Para archivos:
 - usar upload multipart para archivos pequeños con metadata;
 - usar upload resumable para archivos mayores a 5 MB o cuando convenga tolerancia a interrupciones;
 - guardar `driveFileId`, `driveFolderId`, MIME type, tamaño y checksum si se calcula.
+
+## Motor backend inicial
+
+El MVP ya puede crear una `SyncOperation` de tipo `DRIVE_BACKUP_DELIVERY` al cerrar una entrega real. El processor backend ejecuta esa operación bajo demanda y no se dispara todavía desde `/api/deliveries/finalize`, por lo que Drive sigue sin bloquear el alta de una Delivery.
+
+Endpoints disponibles:
+
+- `GET /api/drive/health`: verifica autenticación y acceso a root, Stories y Feed sin crear archivos.
+- `POST /api/drive/sync-operations/[id]`: procesa una SyncOperation puntual de backup.
+- `POST /api/drive/process-pending`: procesa como máximo una operación `PENDING` antigua, sin seleccionar `FAILED`.
+
+Todas las rutas están protegidas server-side por usuario autorizado.
+
+El processor usa locking lógico por transición atómica:
+
+```text
+PENDING / FAILED -> SYNCING
+```
+
+Si la operación ya está `SYNCING`, no lanza otro backup en paralelo. Si ya está `SYNCED`, responde de forma idempotente.
+
+## Idempotencia con appProperties
+
+Los objetos creados por SUQUIA en Drive se identifican con `appProperties`, no solo por nombre visible. Cada búsqueda combina:
+
+- parent folder;
+- `trashed = false`;
+- propiedades SUQUIA.
+
+Si aparece exactamente un objeto, se reutiliza. Si no aparece ninguno, se crea. Si aparecen varios objetos para una identidad única, se detiene con error de integridad para evitar duplicados silenciosos.
+
+Identidades principales:
+
+- Delivery folder: `suquiaEntityType=delivery`, `suquiaEntityId=<deliveryId>`.
+- Piece folder: `suquiaEntityType=piece`, `suquiaEntityId=<pieceId>`, `suquiaDeliveryId=<deliveryId>`.
+- Version folder: `suquiaEntityType=piece-version`, `suquiaEntityId=<pieceVersionId>`, `suquiaDeliveryId=<deliveryId>`.
+- Asset: `suquiaEntityType=piece-version-asset`, `suquiaEntityId=<pieceVersionId>`, `suquiaDeliveryId=<deliveryId>`.
+- Manifest: `suquiaEntityType=delivery-manifest`, `suquiaEntityId=<deliveryId>`.
+- Journal: `suquiaEntityType=delivery-journal`, `suquiaEntityId=<deliveryId>`.
+
+Los IDs se persisten progresivamente en PostgreSQL:
+
+- `Delivery.driveFolderId`;
+- `Delivery.driveManifestFileId`;
+- `PieceVersion.driveFolderId`;
+- `PieceVersion.driveFileId`.
+
+Esto permite reintentos manuales sin duplicar carpetas ni assets.
 
 ## manifest.json
 
@@ -241,8 +282,8 @@ La decisión de estado restaurado queda abierta en `13-open-decisions.md`.
 5. Backend confirma cada objeto con HEAD.
 6. Backend crea Delivery, Pieces y PieceVersions en transacción, guardando `storageKey`.
 7. Backend crea SyncOperation `PENDING`.
-8. Backend ejecuta health check Drive actual.
-9. Si Drive responde, SyncOperation pasa a `SYNCING`.
+8. En el bloque actual, la Delivery queda disponible aunque Drive todavía no se procese automáticamente.
+9. Al invocar el processor, si Drive responde, SyncOperation pasa a `SYNCING`.
 10. Backend copia/sube archivos desde storage operativo a Drive, escribe manifest y journal.
 11. Backend guarda IDs de Drive.
 12. SyncOperation pasa a `SYNCED`.
