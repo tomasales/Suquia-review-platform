@@ -24,6 +24,19 @@ la información ya ingresada debe conservarse.
 - No reintentar automáticamente.
 - El indicador de Drive permite saber cuándo tiene sentido probar nuevamente.
 
+## Drive backup
+
+El backup a Google Drive corre como infraestructura en segundo plano. Una entrega creada correctamente en PostgreSQL y R2 sigue siendo válida aunque Drive falle.
+
+El shell de la aplicación muestra:
+
+- estado de conexión Drive;
+- cantidad prioritaria de backups pendientes, sincronizando o con error;
+- acción manual para verificar Drive;
+- acción manual **Reintentar backup** cuando existe una SyncOperation `FAILED`.
+
+Las operaciones `PENDING` pueden procesarse oportunísticamente cuando Drive está accesible. Las operaciones `FAILED` nunca se reintentan automáticamente: requieren acción manual.
+
 ## Journal
 
 Registrar en Journal:

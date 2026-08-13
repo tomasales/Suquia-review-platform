@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { DriveStatusPanel } from "@/components/drive/drive-status-panel";
+
 import { isNavActive, primaryNav, utilityNav } from "./navigation";
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const driveNavItem = utilityNav[0];
-  const DriveNavIcon = driveNavItem.icon;
 
   return (
     <aside className="hidden fixed inset-y-0 left-0 z-20 w-[var(--sidebar-width)] border-r border-border bg-surface lg:flex lg:flex-col">
@@ -43,18 +43,8 @@ export function AppSidebar() {
       </nav>
 
       <div className="border-t border-border px-3 py-3">
-        <div className="mb-2 rounded-[8px] border border-border bg-background/70 px-3 py-2">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-warning" />
-            <span>Drive pendiente</span>
-          </div>
-          <Link
-            className="mt-2 flex h-8 items-center gap-2 rounded-[7px] text-sm font-medium text-muted-foreground hover:text-foreground"
-            href={driveNavItem.href}
-          >
-            <DriveNavIcon className="size-4" strokeWidth={1.8} />
-            <span className="truncate">{driveNavItem.label}</span>
-          </Link>
+        <div className="mb-2">
+          <DriveStatusPanel />
         </div>
         <nav className="space-y-1">
           {utilityNav.slice(1).map((item) => (

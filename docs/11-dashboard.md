@@ -24,13 +24,12 @@ No queremos:
 - Resumen de estado por entrega.
 - 2-3 recomendaciones/aprendizajes de IA.
 - Journal reciente.
-- Indicador de conexión con Drive.
 
 ## Reglas de negocio
 
 - El Dashboard debe priorizar acción y claridad.
 - El bloque de IA debe ser pequeño y consultivo.
-- El indicador de Drive debe ser persistente y permitir chequeo manual.
+- El indicador de Drive vive en la navegación persistente, no como bloque del Dashboard.
 - Las entregas deben mostrar un resumen útil, por ejemplo cantidad de piezas OK y piezas que necesitan cambios.
 
 ## Referencias cruzadas

@@ -5,7 +5,7 @@ import {
   getApiAuthorizedUser,
 } from "@/app/api/drive/_shared";
 import { db } from "@/lib/db";
-import { getOldestPendingDriveBackupQuery } from "@/lib/drive/operation-selection";
+import { getOldestFailedDriveBackupQuery } from "@/lib/drive/operation-selection";
 import { processDriveBackupOperation } from "@/lib/drive/processor";
 
 export const runtime = "nodejs";
@@ -18,7 +18,7 @@ export async function POST() {
   }
 
   const operation = await db.syncOperation.findFirst(
-    getOldestPendingDriveBackupQuery(),
+    getOldestFailedDriveBackupQuery(),
   );
 
   if (!operation) {

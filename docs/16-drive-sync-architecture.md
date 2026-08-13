@@ -102,8 +102,10 @@ El MVP ya puede crear una `SyncOperation` de tipo `DRIVE_BACKUP_DELIVERY` al cer
 Endpoints disponibles:
 
 - `GET /api/drive/health`: verifica autenticación y acceso a root, Stories y Feed sin crear archivos.
+- `GET /api/drive/status`: lee PostgreSQL y devuelve estado conocido de conexión más conteos `PENDING`, `SYNCING` y `FAILED`, sin llamar a Google Drive.
 - `POST /api/drive/sync-operations/[id]`: procesa una SyncOperation puntual de backup.
 - `POST /api/drive/process-pending`: procesa como máximo una operación `PENDING` antigua, sin seleccionar `FAILED`.
+- `POST /api/drive/retry-failed`: procesa manualmente como máximo una operación `FAILED` antigua.
 
 Todas las rutas están protegidas server-side por usuario autorizado.
 
@@ -114,6 +116,24 @@ PENDING / FAILED -> SYNCING
 ```
 
 Si la operación ya está `SYNCING`, no lanza otro backup en paralelo. Si ya está `SYNCED`, responde de forma idempotente.
+
+## Runtime de aplicación
+
+El shell autenticado monta un único runtime cliente para Drive. Ese runtime alimenta tanto el sidebar desktop como el drawer mobile, evitando polling duplicado.
+
+Comportamiento:
+
+- al montar la app, lee `/api/drive/status`;
+- luego dispara un health check real en background;
+- si el health check termina bien y existen backups pendientes, ejecuta `POST /api/drive/process-pending`;
+- mientras la app está visible, repite health aproximadamente cada 3 minutos;
+- si la pestaña está oculta, evita polling innecesario;
+- al volver a la pestaña, si el último check está viejo, vuelve a verificar;
+- después de navegar, refresca status y procesa como máximo un `PENDING` si corresponde.
+
+`FAILED` nunca se selecciona desde polling, mount ni navegación. Solo se procesa desde acción manual de UI o endpoint puntual explícito.
+
+En el flujo real de **Entregar**, el frontend dispara un health check best-effort al comienzo, sin esperarlo y sin bloquear R2/PostgreSQL. Al finalizar, la navegación al detalle ocurre inmediatamente; el runtime detecta después el pending y lo procesa en background.
 
 ## Idempotencia con appProperties
 
@@ -294,7 +314,7 @@ La decisión de estado restaurado queda abierta en `13-open-decisions.md`.
 1. Backend conserva Delivery, Pieces, PieceVersions, notas y metadata.
 2. Archivos quedan en Cloudflare R2 como almacenamiento operativo persistente.
 3. SyncOperation queda `FAILED`.
-4. Usuario ve error claro y botón **Reintentar**.
+4. Usuario ve estado persistente de Drive y acción manual **Reintentar backup**.
 5. Journal registra fallo.
 6. No hay retry automático inesperado.
 

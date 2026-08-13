@@ -25,6 +25,15 @@ import {
   canStartDriveBackup,
   isSyncedDriveBackup,
 } from "./processor-state";
+import {
+  buildDriveStatusResponse,
+  getDriveBackupSummary,
+  getDriveStatusLabel,
+} from "./status-format";
+import {
+  getOldestFailedDriveBackupQuery,
+  getOldestPendingDriveBackupQuery,
+} from "./operation-selection";
 
 const createdAt = new Date("2026-08-13T12:00:00.000Z");
 const exportedAt = new Date("2026-08-13T13:00:00.000Z");
@@ -190,6 +199,68 @@ assert.doesNotThrow(() =>
 assert.throws(
   () => assertDriveBackupOperationType("AI_PROCESS_FEEDBACK"),
   DriveOperationError,
+);
+
+assert.equal(
+  getDriveBackupSummary({
+    counts: { failed: 1, pending: 3, syncing: 2 },
+    status: "CONNECTED",
+  }),
+  "1 backup con error",
+);
+assert.equal(
+  getDriveBackupSummary({
+    counts: { failed: 0, pending: 3, syncing: 2 },
+    status: "CONNECTED",
+  }),
+  "Sincronizando backup...",
+);
+assert.equal(
+  getDriveBackupSummary({
+    counts: { failed: 0, pending: 3, syncing: 0 },
+    status: "CONNECTED",
+  }),
+  "3 backups pendientes",
+);
+assert.equal(
+  getDriveBackupSummary({
+    counts: { failed: 0, pending: 0, syncing: 0 },
+    status: "CONNECTED",
+  }),
+  "Todo sincronizado",
+);
+assert.equal(
+  getDriveStatusLabel({ isChecking: true, status: "CONNECTED" }),
+  "Verificando Drive...",
+);
+
+assert.deepEqual(
+  buildDriveStatusResponse({
+    counts: { failed: 0, pending: 0, syncing: 0 },
+    state: null,
+  }),
+  {
+    backups: { failed: 0, pending: 0, syncing: 0 },
+    drive: {
+      lastCheckedAt: null,
+      lastErrorCode: null,
+      lastSuccessAt: null,
+      status: "UNKNOWN",
+    },
+  },
+);
+
+assert.equal(
+  getOldestPendingDriveBackupQuery().where.status,
+  SyncOperationStatus.PENDING,
+);
+assert.equal(
+  getOldestFailedDriveBackupQuery().where.status,
+  SyncOperationStatus.FAILED,
+);
+assert.notEqual(
+  getOldestPendingDriveBackupQuery().where.status,
+  getOldestFailedDriveBackupQuery().where.status,
 );
 
 console.log("drive unit tests passed");

@@ -24,6 +24,7 @@ import {
 } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { useDriveRuntime } from "@/components/drive/drive-runtime";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
 import { useToast } from "@/components/ui/toast";
@@ -247,6 +248,7 @@ export function DeliveryUploadFlow({
   visualReviewMode,
 }: DeliveryUploadFlowProps) {
   const router = useRouter();
+  const driveRuntime = useDriveRuntime();
   const { showToast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const draggedPieceId = useRef<string | null>(null);
@@ -642,6 +644,13 @@ export function DeliveryUploadFlow({
 
     setIsSubmitting(true);
     setErrors([]);
+
+    if (!visualReviewMode) {
+      void driveRuntime.checkNow({
+        processPending: false,
+        silent: true,
+      });
+    }
 
     if (visualReviewMode) {
       await new Promise((resolve) => window.setTimeout(resolve, 650));

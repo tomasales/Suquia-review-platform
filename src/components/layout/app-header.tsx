@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
+import { DriveStatusPanel } from "@/components/drive/drive-status-panel";
 
 import { isNavActive, primaryNav, utilityNav } from "./navigation";
 
@@ -35,7 +36,6 @@ export function AppHeader({ user }: AppHeaderProps) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const DriveIcon = utilityNav[0].icon;
 
   useEffect(() => {
     document.body.style.overflow = isMenuOpen || isUserMenuOpen ? "hidden" : "";
@@ -98,19 +98,8 @@ export function AppHeader({ user }: AppHeaderProps) {
             </nav>
 
             <div className="border-t border-border px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
-              <div className="mb-2 rounded-[8px] border border-border bg-background/70 px-3 py-2">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="size-1.5 rounded-full bg-warning" />
-                  <span>Drive pendiente</span>
-                </div>
-                <Link
-                  className="mt-2 flex h-10 items-center gap-2 rounded-[7px] text-sm font-medium text-muted-foreground"
-                  href={utilityNav[0].href}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <DriveIcon className="size-4" strokeWidth={1.8} />
-                  <span className="truncate">{utilityNav[0].label}</span>
-                </Link>
+              <div className="mb-2">
+                <DriveStatusPanel mobile />
               </div>
 
               <nav className="space-y-1">
