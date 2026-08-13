@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getApiAuthorizedUser } from "@/app/api/storage/_shared";
 import {
   getPublicStorageErrorMessage,
+  StorageConfigurationError,
   StorageValidationError,
 } from "@/lib/storage/errors";
 
@@ -20,10 +21,13 @@ export function deliveryApiErrorResponse(error: unknown) {
     return NextResponse.json({ error: error.message }, { status: 409 });
   }
 
-  if (error instanceof StorageValidationError) {
+  if (
+    error instanceof StorageValidationError ||
+    error instanceof StorageConfigurationError
+  ) {
     return NextResponse.json(
       { error: getPublicStorageErrorMessage(error) },
-      { status: 400 },
+      { status: error instanceof StorageValidationError ? 400 : 500 },
     );
   }
 

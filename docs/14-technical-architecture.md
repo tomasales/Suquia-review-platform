@@ -138,14 +138,19 @@ Flujo de creación real:
 ```text
 Browser
 → POST /api/deliveries/prepare
-→ backend genera deliveryId/pieceId y signed PUTs para keys definitivas
+→ backend genera deliveryId/pieceId, signed PUTs para keys definitivas y receipt HMAC temporal
 → browser sube archivos directo a R2
 → POST /api/deliveries/finalize
+→ server verifica receipt, usuario, expiración y obtiene metadata canónica
 → server HEAD verification
 → DB transaction creates Delivery/Piece/PieceVersion
 → Journal + SyncOperation PENDING para Drive
 → redirect detail
 ```
+
+`finalize` no confía en metadata estructural enviada libremente por el browser. El browser solo vuelve a enviar `attemptToken`, nota general y notas guardadas por pieza. `type`, orden, `storageKey`, filenames, MIME types, tamaños y IDs de piezas salen del receipt firmado emitido por `prepare`.
+
+El cleanup de intentos de creación también es un capability temporal: `cleanup-upload` acepta únicamente el `attemptToken`, valida usuario y expiración, comprueba que la Delivery no exista y borra solamente las keys contenidas en ese receipt. Esto no es un Draft de negocio y no crea filas en PostgreSQL antes de `finalize`.
 
 Si Drive falla, la Delivery no se invalida. El archivo ya está en R2, la metadata queda en PostgreSQL y la sincronización a Drive queda pendiente/fallida para reintento.
 

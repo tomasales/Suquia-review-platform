@@ -36,6 +36,7 @@ Para modo real hacen falta, como mínimo:
 - `DATABASE_URL`
 - credenciales Google OAuth/Auth.js
 - variables Cloudflare R2
+- `DELIVERY_UPLOAD_SECRET`
 
 Variables R2:
 
@@ -45,9 +46,10 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=
 R2_ENDPOINT=
+DELIVERY_UPLOAD_SECRET=
 ```
 
-El flujo real de **Nueva entrega** prepara IDs definitivos, sube piezas directo desde el navegador a R2 con URLs firmadas, verifica los objetos, crea Delivery/Pieces/PieceVersion V1 en PostgreSQL, registra Journal y deja una SyncOperation pendiente para el backup futuro en Drive.
+El flujo real de **Nueva entrega** prepara IDs definitivos, emite un receipt firmado temporal, sube piezas directo desde el navegador a R2 con URLs firmadas, verifica los objetos, crea Delivery/Pieces/PieceVersion V1 en PostgreSQL, registra Journal y deja una SyncOperation pendiente para el backup futuro en Drive.
 
 ## Visual review local
 

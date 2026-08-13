@@ -1,5 +1,6 @@
 import { DeliveryType } from "@prisma/client";
 
+import type { DeliveryUploadReceiptPayload } from "@/lib/delivery-upload-receipt";
 import { deliveryTypeLabel } from "@/lib/delivery-presentation";
 import { StorageValidationError } from "@/lib/storage/errors";
 import {
@@ -21,6 +22,11 @@ export type FinalizeDeliveryPiece = {
   pieceId: string;
   position: number;
   storageKey: string;
+};
+
+export type FinalizeDeliveryNotesInput = {
+  generalNote: string | null;
+  pieceNotes: Map<string, string | null>;
 };
 
 const submitTitleDateFormatter = new Intl.DateTimeFormat("es-AR", {
@@ -98,67 +104,90 @@ export function validatePrepareDeliveryInput(input: unknown) {
 export function validateFinalizeDeliveryInput(input: unknown) {
   if (
     !isRecord(input) ||
-    typeof input.deliveryId !== "string" ||
-    !input.deliveryId.trim() ||
-    !isDeliveryType(input.type)
+    typeof input.attemptToken !== "string" ||
+    !input.attemptToken.trim()
   ) {
     throw new StorageValidationError("Payload de entrega inválido.");
   }
 
-  if (!Array.isArray(input.pieces) || input.pieces.length === 0) {
-    throw new StorageValidationError("Agregá al menos una pieza.");
+  return {
+    attemptToken: input.attemptToken,
+    generalNote: normalizeOptionalNote(input.generalNote),
+    rawPieces: input.pieces,
+  };
+}
+
+export function validateFinalizeNotesInput({
+  allowedPieceIds,
+  generalNote,
+  pieces,
+}: {
+  allowedPieceIds: string[];
+  generalNote: unknown;
+  pieces: unknown;
+}): FinalizeDeliveryNotesInput {
+  if (!Array.isArray(pieces)) {
+    throw new StorageValidationError("Payload de piezas inválido.");
   }
 
-  const deliveryId = input.deliveryId.trim();
-  const pieces = input.pieces.map((piece, index) => {
+  const allowed = new Set(allowedPieceIds);
+  const pieceNotes = new Map<string, string | null>();
+
+  for (const piece of pieces) {
     if (
       !isRecord(piece) ||
-      typeof piece.pieceId !== "string" ||
-      typeof piece.position !== "number" ||
-      typeof piece.originalFilename !== "string" ||
-      typeof piece.mimeType !== "string" ||
-      typeof piece.fileSizeBytes !== "number" ||
-      typeof piece.storageKey !== "string"
+      typeof piece.pieceId !== "string"
     ) {
       throw new StorageValidationError("Payload de pieza inválido.");
     }
 
-    const expectedPosition = index + 1;
     const pieceId = piece.pieceId.trim();
 
-    if (!pieceId || piece.position !== expectedPosition) {
+    if (!allowed.has(pieceId)) {
+      throw new StorageValidationError("La nota no corresponde a esta entrega.");
+    }
+
+    if (pieceNotes.has(pieceId)) {
+      throw new StorageValidationError("La nota de una pieza está duplicada.");
+    }
+
+    pieceNotes.set(pieceId, normalizeOptionalNote(piece.note));
+  }
+
+  return {
+    generalNote: normalizeOptionalNote(generalNote),
+    pieceNotes,
+  };
+}
+
+export function getReceiptFinalizePieces(receipt: DeliveryUploadReceiptPayload) {
+  return receipt.pieces.map((piece, index) => {
+    if (piece.position !== index + 1) {
       throw new StorageValidationError("El orden de piezas no es válido.");
     }
 
     validateUploadUrlInput({
       fileSizeBytes: piece.fileSizeBytes,
-      filename: piece.originalFilename,
+      filename: piece.filename,
       mimeType: piece.mimeType,
       purpose: "piece-version",
     });
     assertPieceVersionV1StorageKey({
-      deliveryId,
-      pieceId,
+      deliveryId: receipt.deliveryId,
+      pieceId: piece.pieceId,
       storageKey: piece.storageKey,
     });
 
     return {
       fileSizeBytes: piece.fileSizeBytes,
       mimeType: piece.mimeType,
-      note: normalizeOptionalNote(piece.note),
-      originalFilename: piece.originalFilename.trim(),
-      pieceId,
-      position: expectedPosition,
+      note: null,
+      originalFilename: piece.filename.trim(),
+      pieceId: piece.pieceId,
+      position: piece.position,
       storageKey: piece.storageKey,
     } satisfies FinalizeDeliveryPiece;
   });
-
-  return {
-    deliveryId,
-    generalNote: normalizeOptionalNote(input.generalNote),
-    pieces,
-    type: input.type,
-  };
 }
 
 export function assertPieceVersionV1StorageKey({

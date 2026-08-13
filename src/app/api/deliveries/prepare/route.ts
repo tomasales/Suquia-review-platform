@@ -5,6 +5,7 @@ import {
   getApiAuthorizedUser,
 } from "@/app/api/deliveries/_shared";
 import { validatePrepareDeliveryInput } from "@/lib/delivery-creation";
+import { createDeliveryUploadReceipt } from "@/lib/delivery-upload-receipt";
 import {
   buildPieceVersionStorageKey,
   createUploadUrlForStorageKey,
@@ -13,7 +14,7 @@ import {
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const { response } = await getApiAuthorizedUser();
+  const { response, user } = await getApiAuthorizedUser();
 
   if (response) {
     return response;
@@ -40,6 +41,9 @@ export async function POST(request: Request) {
 
         return {
           expiresAt: upload.expiresAt,
+          fileSizeBytes: piece.fileSizeBytes,
+          filename: piece.filename,
+          mimeType: piece.mimeType,
           pieceId,
           position: index + 1,
           storageKey,
@@ -47,10 +51,30 @@ export async function POST(request: Request) {
         };
       }),
     );
+    const attemptToken = createDeliveryUploadReceipt({
+      deliveryId,
+      pieces: pieces.map((piece) => ({
+        fileSizeBytes: piece.fileSizeBytes,
+        filename: piece.filename,
+        mimeType: piece.mimeType,
+        pieceId: piece.pieceId,
+        position: piece.position,
+        storageKey: piece.storageKey,
+      })),
+      type: input.type,
+      userId: user.id,
+    });
 
     return NextResponse.json({
+      attemptToken,
       deliveryId,
-      pieces,
+      pieces: pieces.map((piece) => ({
+        expiresAt: piece.expiresAt,
+        pieceId: piece.pieceId,
+        position: piece.position,
+        storageKey: piece.storageKey,
+        uploadUrl: piece.uploadUrl,
+      })),
     });
   } catch (error) {
     return deliveryApiErrorResponse(error);

@@ -54,12 +54,14 @@ type PreparedAttemptPiece = {
 };
 
 type PreparedAttempt = {
+  attemptToken: string;
   deliveryId: string;
   pieces: PreparedAttemptPiece[];
   type: DeliveryType;
 };
 
 type PrepareDeliveryResponse = {
+  attemptToken: string;
   deliveryId: string;
   pieces: Array<{
     expiresAt: string;
@@ -188,6 +190,7 @@ async function prepareDeliveryUpload({
   );
 
   return {
+    attemptToken: result.attemptToken,
     deliveryId: result.deliveryId,
     pieces: result.pieces.map((piece, index) => ({
       ...piece,
@@ -202,55 +205,36 @@ async function finalizeDeliveryUpload({
   attempt,
   generalNote,
   pieces,
-  type,
 }: {
   attempt: PreparedAttempt;
   generalNote: string;
   pieces: Array<{
-    file: File;
     id: string;
     note: string;
   }>;
-  type: DeliveryType;
 }) {
-  const pieceById = new Map(pieces.map((piece) => [piece.id, piece]));
+  const noteByLocalPieceId = new Map(pieces.map((piece) => [piece.id, piece.note]));
 
   return postJson<FinalizeDeliveryResponse>("/api/deliveries/finalize", {
-    deliveryId: attempt.deliveryId,
+    attemptToken: attempt.attemptToken,
     generalNote,
     pieces: attempt.pieces.map((preparedPiece) => {
-      const piece = pieceById.get(preparedPiece.localPieceId);
-
-      if (!piece) {
-        throw new Error("Tus cambios siguen acá. Intentá nuevamente.");
-      }
-
       return {
-        fileSizeBytes: piece.file.size,
-        mimeType: piece.file.type,
-        note: piece.note,
-        originalFilename: piece.file.name,
         pieceId: preparedPiece.pieceId,
-        position: preparedPiece.position,
-        storageKey: preparedPiece.storageKey,
+        note: noteByLocalPieceId.get(preparedPiece.localPieceId) ?? "",
       };
     }),
-    type,
   });
 }
 
-async function cleanupUploadedObjects(storageKeys: string[]) {
-  await Promise.allSettled(
-    storageKeys.map((storageKey) =>
-      fetch("/api/storage/object", {
-        body: JSON.stringify({ storageKey }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        method: "DELETE",
-      }),
-    ),
-  );
+async function cleanupPreparedAttempt(attemptToken: string) {
+  await fetch("/api/deliveries/cleanup-upload", {
+    body: JSON.stringify({ attemptToken }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  }).catch(() => null);
 }
 
 function getClientErrorMessage(error: unknown) {
@@ -560,11 +544,7 @@ export function DeliveryUploadFlow({
       return;
     }
 
-    void cleanupUploadedObjects(
-      preparedAttempt.pieces
-        .filter((piece) => piece.uploaded)
-        .map((piece) => piece.storageKey),
-    );
+    void cleanupPreparedAttempt(preparedAttempt.attemptToken);
     setPreparedAttempt(null);
     resetPieceUploadState();
   }
@@ -583,7 +563,6 @@ export function DeliveryUploadFlow({
     const fileByPieceId = new Map(
       snapshotPieces.map((piece) => [piece.id, piece.file]),
     );
-    const uploadedKeys: string[] = [];
     const errors: Array<{ localPieceId: string }> = [];
     let cursor = 0;
 
@@ -626,7 +605,6 @@ export function DeliveryUploadFlow({
           }
 
           preparedPiece.uploaded = true;
-          uploadedKeys.push(preparedPiece.storageKey);
           setPieceUploadState(preparedPiece.localPieceId, "uploaded");
         } catch {
           errors.push({ localPieceId: preparedPiece.localPieceId });
@@ -642,7 +620,7 @@ export function DeliveryUploadFlow({
     await Promise.all(Array.from({ length: 4 }, () => worker()));
 
     if (errors.length > 0) {
-      await cleanupUploadedObjects(uploadedKeys);
+      await cleanupPreparedAttempt(attempt.attemptToken);
       setPreparedAttempt(null);
       setPieces((currentPieces) =>
         currentPieces.map((piece) =>
@@ -722,13 +700,20 @@ export function DeliveryUploadFlow({
         attempt: uploadedAttempt,
         generalNote: snapshot.generalNote,
         pieces: snapshot.pieces,
-        type: snapshot.type,
       });
 
       router.push(
         `/deliveries/${result.deliveryId}?created=1&pieces=${snapshot.pieces.length}`,
       );
     } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.toLowerCase().includes("expiró")
+      ) {
+        setPreparedAttempt(null);
+        resetPieceUploadState();
+      }
+
       showToast({
         title: "No pudimos crear la entrega",
         description: getClientErrorMessage(error),
