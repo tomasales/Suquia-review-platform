@@ -1,11 +1,14 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
+import { PieceReviewExperience } from "@/components/deliveries/piece-review-experience";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Surface } from "@/components/ui/surface";
 import { getDeliveryById } from "@/lib/deliveries";
 import { requireAuthorizedUser } from "@/lib/session";
+import { isVisualReviewMode } from "@/lib/visual-review";
 
 type DeliveryDetailPageProps = {
   params: Promise<{
@@ -32,53 +35,20 @@ export default async function DeliveryDetailPage({
         action={<Badge tone={delivery.statusTone}>{delivery.statusLabel}</Badge>}
       />
 
-      <section className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_304px]">
+      <section className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_260px]">
         <Surface contentClassName="p-0" title="Piezas">
-          {delivery.pieces.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[680px] border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-border bg-surface-muted/35 text-[11px] font-semibold uppercase tracking-[0.04em] text-subtle-foreground">
-                    <th className="px-4 py-2">Orden</th>
-                    <th className="px-4 py-2">Pieza</th>
-                    <th className="px-4 py-2">Estado</th>
-                    <th className="px-4 py-2">Versión</th>
-                    <th className="px-4 py-2">Nota</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {delivery.pieces.map((piece) => (
-                    <tr
-                      className="border-b border-border/85 last:border-0"
-                      key={piece.id}
-                    >
-                      <td className="px-4 py-2.5 text-sm text-muted-foreground">
-                        {piece.position}
-                      </td>
-                      <td className="px-4 py-2.5 text-sm font-semibold text-foreground">
-                        Pieza {piece.position}
-                      </td>
-                      <td className="px-4 py-2.5 text-sm text-muted-foreground">
-                        {piece.reviewStateLabel}
-                      </td>
-                      <td className="px-4 py-2.5 text-sm text-muted-foreground">
-                        {piece.latestVersion
-                          ? `V${piece.latestVersion.versionNumber} · ${piece.latestVersion.originalFilename}`
-                          : "Sin versiones"}
-                      </td>
-                      <td className="px-4 py-2.5 text-sm text-muted-foreground">
-                        {piece.initialNote ?? "Sin nota"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="p-4 text-sm text-muted-foreground">
-              Esta entrega no tiene piezas registradas.
-            </p>
-          )}
+          <Suspense
+            fallback={
+              <p className="p-4 text-sm text-muted-foreground">
+                Cargando piezas...
+              </p>
+            }
+          >
+            <PieceReviewExperience
+              isVisualReviewMode={isVisualReviewMode()}
+              pieces={delivery.pieces}
+            />
+          </Suspense>
         </Surface>
 
         <aside className="space-y-3">

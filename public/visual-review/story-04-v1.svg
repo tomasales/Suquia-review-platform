@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <rect width="1080" height="1920" fill="#eeeae2"/>
+  <rect x="120" y="180" width="840" height="1280" rx="44" fill="#ffffff" stroke="#d8d3c9" stroke-width="8"/>
+  <rect x="190" y="270" width="700" height="940" rx="40" fill="#e7dfe9"/>
+  <rect x="190" y="1320" width="520" height="54" rx="22" fill="#1d1b18"/>
+  <rect x="190" y="1410" width="620" height="36" rx="18" fill="#8b8479"/>
+  <text x="190" y="1660" fill="#817b72" font-family="Arial" font-size="52" font-weight="700">Story 04</text>
+</svg>

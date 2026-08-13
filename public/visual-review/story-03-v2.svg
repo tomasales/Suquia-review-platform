@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <rect width="1080" height="1920" fill="#f7f6f3"/>
+  <rect x="86" y="120" width="908" height="1680" rx="52" fill="#ffffff" stroke="#d8d3c9" stroke-width="8"/>
+  <rect x="160" y="250" width="760" height="520" rx="38" fill="#eadfce"/>
+  <rect x="160" y="890" width="610" height="58" rx="24" fill="#1d1b18"/>
+  <rect x="160" y="990" width="700" height="38" rx="19" fill="#8b8479"/>
+  <text x="160" y="1255" fill="#1d1b18" font-family="Arial" font-size="108" font-weight="800">$ 45</text>
+  <rect x="160" y="1500" width="420" height="92" rx="28" fill="#191817"/>
+  <text x="205" y="1560" fill="#ffffff" font-family="Arial" font-size="40" font-weight="700">CTA claro</text>
+</svg>

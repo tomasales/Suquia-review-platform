@@ -1,4 +1,9 @@
-import { DeliveryStatus, DeliveryType, Prisma } from "@prisma/client";
+import {
+  DeliveryStatus,
+  DeliveryType,
+  PieceReviewState,
+  Prisma,
+} from "@prisma/client";
 
 import { db } from "@/lib/db";
 import {
@@ -11,6 +16,7 @@ import {
   pieceReviewStateLabel,
 } from "@/lib/delivery-presentation";
 import {
+  getVisualReviewPieceData,
   visualReviewAuthors,
   visualReviewDeliveries,
 } from "@/lib/visual-review-data";
@@ -310,14 +316,33 @@ function toDeliveryDetail(delivery: DeliveryDetailRecord) {
     generalNote: delivery.generalNote,
     pieces: delivery.pieces.map((piece) => {
       const latestVersion = piece.versions[0] ?? null;
+      const visualReviewData = getVisualReviewPieceData(piece.id);
+      const versions =
+        visualReviewData?.versions ??
+        (latestVersion
+          ? [
+              {
+                versionNumber: latestVersion.versionNumber,
+                uploadedAtLabel: formatDeliveryDate(latestVersion.uploadedAt),
+                imageSrc: null,
+                feedback: [],
+                references: [],
+                conversation: [],
+              },
+            ]
+          : []);
 
       return {
         id: piece.id,
         position: piece.position,
         initialNote: piece.initialNote,
+        reviewState: piece.reviewState,
         reviewStateLabel: piece.reviewState
           ? pieceReviewStateLabel[piece.reviewState]
           : "Sin revisar",
+        reviewStateTone: getPieceReviewTone(piece.reviewState),
+        aspect: visualReviewData?.aspect ?? getPieceAspect(delivery.type),
+        versions,
         latestVersion: latestVersion
           ? {
               versionNumber: latestVersion.versionNumber,
@@ -328,6 +353,22 @@ function toDeliveryDetail(delivery: DeliveryDetailRecord) {
       };
     }),
   };
+}
+
+function getPieceAspect(deliveryType: DeliveryType) {
+  return deliveryType === DeliveryType.STORIES ? "story" : "feed";
+}
+
+function getPieceReviewTone(reviewState: PieceReviewState | null) {
+  if (reviewState === PieceReviewState.OK) {
+    return "success";
+  }
+
+  if (reviewState === PieceReviewState.NEEDS_CHANGES) {
+    return "warning";
+  }
+
+  return "neutral";
 }
 
 function getFirstParam(value: string | string[] | undefined) {
