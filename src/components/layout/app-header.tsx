@@ -33,15 +33,16 @@ export function AppHeader({ user }: AppHeaderProps) {
   const displayName = user.name ?? user.email;
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const DriveIcon = utilityNav[0].icon;
 
   useEffect(() => {
-    document.body.style.overflow = isMenuOpen ? "hidden" : "";
+    document.body.style.overflow = isMenuOpen || isUserMenuOpen ? "hidden" : "";
 
     return () => {
       document.body.style.overflow = "";
     };
-  }, [isMenuOpen]);
+  }, [isMenuOpen, isUserMenuOpen]);
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur">
@@ -49,7 +50,10 @@ export function AppHeader({ user }: AppHeaderProps) {
         <button
           aria-label="Abrir navegación"
           className="inline-flex size-9 items-center justify-center rounded-[8px] border border-border text-muted-foreground lg:hidden"
-          onClick={() => setIsMenuOpen(true)}
+          onClick={() => {
+            setIsUserMenuOpen(false);
+            setIsMenuOpen(true);
+          }}
           type="button"
         >
           <Menu className="size-4" />
@@ -70,19 +74,30 @@ export function AppHeader({ user }: AppHeaderProps) {
               {user.email}
             </p>
           </div>
-          {user.image ? (
-            <Image
-              alt=""
-              className="size-9 rounded-full border border-border"
-              height={36}
-              src={user.image}
-              width={36}
-            />
-          ) : (
-            <div className="flex size-9 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-foreground">
-              {getInitials(user)}
-            </div>
-          )}
+          <button
+            aria-label="Abrir menú de usuario"
+            aria-expanded={isUserMenuOpen}
+            className="inline-flex size-10 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-foreground/20"
+            onClick={() => {
+              setIsMenuOpen(false);
+              setIsUserMenuOpen((current) => !current);
+            }}
+            type="button"
+          >
+            {user.image ? (
+              <Image
+                alt=""
+                className="size-9 rounded-full border border-border"
+                height={36}
+                src={user.image}
+                width={36}
+              />
+            ) : (
+              <span className="flex size-9 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-foreground">
+                {getInitials(user)}
+              </span>
+            )}
+          </button>
           <div className="hidden sm:block">
             <SignOutButton />
           </div>
@@ -178,6 +193,41 @@ export function AppHeader({ user }: AppHeaderProps) {
               </div>
             </div>
           </aside>
+        </div>
+      ) : null}
+
+      {isUserMenuOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            aria-label="Cerrar menú de usuario"
+            className="absolute inset-0 bg-black/24"
+            onClick={() => setIsUserMenuOpen(false)}
+            type="button"
+          />
+          <section className="absolute inset-x-3 top-[calc(4rem+env(safe-area-inset-top))] rounded-[var(--radius)] border border-border bg-surface p-3 shadow-[0_18px_60px_rgba(25,24,23,0.16)]">
+            <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {displayName}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {user.email}
+                </p>
+              </div>
+              <button
+                aria-label="Cerrar menú de usuario"
+                className="inline-flex size-9 items-center justify-center rounded-[8px] border border-border text-muted-foreground"
+                onClick={() => setIsUserMenuOpen(false)}
+                type="button"
+              >
+                <X className="size-4" strokeWidth={1.8} />
+              </button>
+            </div>
+
+            <div className="pt-3">
+              <SignOutButton />
+            </div>
+          </section>
         </div>
       ) : null}
     </header>
