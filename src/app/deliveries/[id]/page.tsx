@@ -50,6 +50,7 @@ export default async function DeliveryDetailPage({
             }
           >
             <PieceReviewExperience
+              deliveryStatus={delivery.status}
               isVisualReviewMode={isVisualReviewMode()}
               pieces={delivery.pieces}
             />

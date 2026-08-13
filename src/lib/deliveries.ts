@@ -1,6 +1,7 @@
 import {
   DeliveryStatus,
   DeliveryType,
+  FeedbackLevel,
   PieceReviewState,
   Prisma,
 } from "@prisma/client";
@@ -96,8 +97,8 @@ const deliveryDetailSelect = {
         orderBy: {
           versionNumber: "desc",
         },
-        take: 1,
         select: {
+          id: true,
           fileSizeBytes: true,
           mimeType: true,
           versionNumber: true,
@@ -108,6 +109,26 @@ const deliveryDetailSelect = {
             select: {
               email: true,
               name: true,
+            },
+          },
+          feedback: {
+            where: {
+              level: FeedbackLevel.PIECE,
+            },
+            orderBy: {
+              createdAt: "asc",
+            },
+            select: {
+              id: true,
+              body: true,
+              createdAt: true,
+              sourceType: true,
+              author: {
+                select: {
+                  email: true,
+                  name: true,
+                },
+              },
             },
           },
         },
@@ -324,30 +345,37 @@ async function toDeliveryDetail(delivery: DeliveryDetailRecord) {
     delivery.pieces.map(async (piece) => {
       const latestVersion = piece.versions[0] ?? null;
       const visualReviewData = getVisualReviewPieceData(piece.id);
-      const readUrl = latestVersion?.storageKey
-        ? await createReadUrl(latestVersion.storageKey)
-            .then((result) => result.readUrl)
-            .catch(() => null)
-        : null;
       const versions =
         visualReviewData?.versions ??
-        (latestVersion
-          ? [
-              {
-                fileSizeBytes: Number(latestVersion.fileSizeBytes),
-                mimeType: latestVersion.mimeType,
-                originalFilename: latestVersion.originalFilename,
-                versionNumber: latestVersion.versionNumber,
-                uploadedAtLabel: formatDeliveryDate(latestVersion.uploadedAt),
-                uploaderLabel:
-                  latestVersion.uploadedBy.name ?? latestVersion.uploadedBy.email,
-                imageSrc: readUrl,
-                feedback: [],
-                references: [],
-                conversation: [],
-              },
-            ]
-          : []);
+        (await Promise.all(
+          piece.versions.map(async (version) => {
+            const readUrl = version.storageKey
+              ? await createReadUrl(version.storageKey)
+                  .then((result) => result.readUrl)
+                  .catch(() => null)
+              : null;
+
+            return {
+              id: version.id,
+              fileSizeBytes: Number(version.fileSizeBytes),
+              mimeType: version.mimeType,
+              originalFilename: version.originalFilename,
+              versionNumber: version.versionNumber,
+              uploadedAtLabel: formatDeliveryDate(version.uploadedAt),
+              uploaderLabel: version.uploadedBy.name ?? version.uploadedBy.email,
+              imageSrc: readUrl,
+              feedback: version.feedback.map((item) => ({
+                id: item.id,
+                author: item.author.name ?? item.author.email,
+                body: item.body,
+                createdAtLabel: formatFeedbackDate(item.createdAt),
+                sourceType: item.sourceType,
+              })),
+              references: [],
+              conversation: [],
+            };
+          }),
+        ));
 
       return {
         id: piece.id,
@@ -380,6 +408,17 @@ async function toDeliveryDetail(delivery: DeliveryDetailRecord) {
     generalNote: delivery.generalNote,
     pieces,
   };
+}
+
+const feedbackDateFormatter = new Intl.DateTimeFormat("es-AR", {
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  month: "short",
+});
+
+function formatFeedbackDate(date: Date) {
+  return feedbackDateFormatter.format(date);
 }
 
 function getPieceAspect(deliveryType: DeliveryType) {

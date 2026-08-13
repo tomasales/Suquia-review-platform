@@ -16,9 +16,12 @@ type PieceReviewModalProps = {
   draft: string;
   hasNext: boolean;
   hasPrevious: boolean;
-  isVisualReviewMode: boolean;
+  isFeedbackSubmitting: boolean;
+  isReadOnly: boolean;
+  isReviewSaving: boolean;
   onClose: () => void;
   onDraftChange: (value: string) => void;
+  onFeedbackSubmit: () => void;
   onNext: () => void;
   onPrevious: () => void;
   onReviewStateChange: (reviewState: ReviewState) => void;
@@ -32,9 +35,12 @@ export function PieceReviewModal({
   draft,
   hasNext,
   hasPrevious,
-  isVisualReviewMode,
+  isFeedbackSubmitting,
+  isReadOnly,
+  isReviewSaving,
   onClose,
   onDraftChange,
+  onFeedbackSubmit,
   onNext,
   onPrevious,
   onReviewStateChange,
@@ -185,9 +191,12 @@ export function PieceReviewModal({
           <div className="md:hidden">
             <PieceReviewPanel
               draft={draft}
+              isFeedbackSubmitting={isFeedbackSubmitting}
               isMobileLayout
-              isVisualReviewMode={isVisualReviewMode}
+              isReadOnly={isReadOnly}
+              isReviewSaving={isReviewSaving}
               onDraftChange={onDraftChange}
+              onFeedbackSubmit={onFeedbackSubmit}
               onReviewStateChange={onReviewStateChange}
               onVersionSelect={onVersionSelect}
               piece={piece}
@@ -200,8 +209,11 @@ export function PieceReviewModal({
         <div className="hidden min-h-0 md:block">
           <PieceReviewPanel
             draft={draft}
-            isVisualReviewMode={isVisualReviewMode}
+            isFeedbackSubmitting={isFeedbackSubmitting}
+            isReadOnly={isReadOnly}
+            isReviewSaving={isReviewSaving}
             onDraftChange={onDraftChange}
+            onFeedbackSubmit={onFeedbackSubmit}
             onReviewStateChange={onReviewStateChange}
             onVersionSelect={onVersionSelect}
             piece={piece}

@@ -115,6 +115,20 @@ Los nombres podrán ajustarse más adelante.
 - Aunque todas las piezas estén OK, la entrega no se cierra automáticamente.
 - Debe existir una acción manual **Cerrar entrega**.
 
+## Integración inicial con revisión de piezas
+
+Durante el MVP, las acciones reales de revisión por pieza actualizan el estado de la entrega de forma básica:
+
+- si una entrega está en **Enviado para revisar** y se marca una pieza como **OK**, pasa a **En revisión**;
+- si una entrega está en **Enviado para revisar** y se marca una pieza como **Necesita cambios**, pasa a **Requiere cambios**;
+- si una entrega está en **En revisión** y una pieza se marca como **Necesita cambios**, pasa a **Requiere cambios**;
+- si una entrega está en **Requiere cambios** y una pieza vuelve a **OK**, la entrega permanece en **Requiere cambios**;
+- marcar todas las piezas como **OK** no aprueba ni cierra automáticamente la entrega.
+
+Cuando se agrega feedback por pieza a una entrega en **Enviado para revisar**, la entrega pasa a **En revisión**.
+
+Las entregas **Cerradas** quedan en modo lectura para revisión y feedback.
+
 ## Flujo típico
 
 1. Diseñadora envía.
@@ -144,6 +158,7 @@ Journal debe registrar quién eliminó la entrega.
 - Nombres definitivos de estados y microcopy.
 - Si más adelante se registra también el estado **Publicado**.
 - Política de archivado además de eliminación.
+- Sincronización incremental a Drive después de cambios de revisión o feedback.
 
 ## Referencias cruzadas
 

@@ -3,38 +3,66 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { useToast } from "@/components/ui/toast";
 import type { DeliveryDetail } from "@/lib/deliveries";
 
 import { PieceGrid } from "./piece-grid";
 import { PieceReviewModal } from "./piece-review-modal";
 
 type Piece = DeliveryDetail["pieces"][number];
+type PieceFeedback = Piece["versions"][number]["feedback"][number];
 type ReviewState = Piece["reviewState"];
 
 type PieceReviewExperienceProps = {
+  deliveryStatus: DeliveryDetail["status"];
   isVisualReviewMode: boolean;
   pieces: Piece[];
 };
 
 export function PieceReviewExperience({
+  deliveryStatus,
   isVisualReviewMode,
   pieces,
 }: PieceReviewExperienceProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [reviewStates, setReviewStates] = useState<Record<string, ReviewState>>(
-    () =>
-      Object.fromEntries(
-        pieces.map((piece) => [piece.id, piece.reviewState]),
-      ) as Record<string, ReviewState>,
+  const { showToast } = useToast();
+  const [reviewOverrides, setReviewOverrides] = useState<
+    Record<string, ReviewState>
+  >({});
+  const [feedbackOverrides, setFeedbackOverrides] = useState<
+    Record<string, PieceFeedback[]>
+  >({});
+  const [pendingReviewPieceId, setPendingReviewPieceId] = useState<string | null>(
+    null,
+  );
+  const [pendingFeedbackKey, setPendingFeedbackKey] = useState<string | null>(
+    null,
   );
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const isReadOnly = deliveryStatus === "CLOSED";
+
+  const pieceItems = useMemo(
+    () =>
+      pieces.map((piece) => ({
+        ...piece,
+        reviewState: reviewOverrides[piece.id] ?? piece.reviewState,
+        versions: piece.versions.map((version) => ({
+          ...version,
+          feedback: mergeFeedback(
+            version.feedback,
+            feedbackOverrides[version.id] ?? [],
+          ),
+        })),
+      })),
+    [feedbackOverrides, pieces, reviewOverrides],
+  );
 
   const selectedPieceId = searchParams.get("piece");
   const selectedPiece = useMemo(
-    () => pieces.find((piece) => piece.id === selectedPieceId) ?? null,
-    [pieces, selectedPieceId],
+    () => pieceItems.find((piece) => piece.id === selectedPieceId) ?? null,
+    [pieceItems, selectedPieceId],
   );
   const selectedVersionNumber = Number(searchParams.get("version"));
   const selectedVersion =
@@ -44,11 +72,11 @@ export function PieceReviewExperience({
     selectedPiece?.versions[0] ??
     null;
   const selectedIndex = selectedPiece
-    ? pieces.findIndex((piece) => piece.id === selectedPiece.id)
+    ? pieceItems.findIndex((piece) => piece.id === selectedPiece.id)
     : -1;
   const draftKey =
     selectedPiece && selectedVersion
-      ? `${selectedPiece.id}-${selectedVersion.versionNumber}`
+      ? `${selectedPiece.id}-${selectedVersion.id}`
       : "";
 
   function navigateToPiece(pieceId: string) {
@@ -78,26 +106,55 @@ export function PieceReviewExperience({
   }
 
   function goToOffset(offset: -1 | 1) {
-    const nextPiece = pieces[selectedIndex + offset];
+    const nextPiece = pieceItems[selectedIndex + offset];
 
     if (nextPiece) {
       navigateToPiece(nextPiece.id);
     }
   }
 
-  function setSelectedReviewState(reviewState: ReviewState) {
-    if (!selectedPiece || !isVisualReviewMode) {
+  async function setSelectedReviewState(reviewState: ReviewState) {
+    if (!selectedPiece || !reviewState || isReadOnly) {
       return;
     }
 
-    setReviewStates((current) => ({
-      ...current,
-      [selectedPiece.id]: reviewState,
-    }));
+    if (isVisualReviewMode) {
+      setReviewOverride(selectedPiece.id, reviewState);
+      return;
+    }
+
+    const previousReviewState = reviewOverrides[selectedPiece.id];
+    setPendingReviewPieceId(selectedPiece.id);
+    setReviewOverride(selectedPiece.id, reviewState);
+
+    try {
+      const response = await fetch(`/api/pieces/${selectedPiece.id}/review-state`, {
+        body: JSON.stringify({ reviewState }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "PATCH",
+      });
+
+      if (!response.ok) {
+        throw new Error("Review request failed.");
+      }
+
+      router.refresh();
+    } catch {
+      setReviewOverride(selectedPiece.id, previousReviewState);
+      showToast({
+        description: "Intentá nuevamente.",
+        title: "No pudimos guardar la revisión",
+        tone: "error",
+      });
+    } finally {
+      setPendingReviewPieceId(null);
+    }
   }
 
   function updateDraft(value: string) {
-    if (!draftKey || !isVisualReviewMode) {
+    if (!draftKey || isReadOnly) {
       return;
     }
 
@@ -107,33 +164,133 @@ export function PieceReviewExperience({
     }));
   }
 
+  async function submitFeedback() {
+    if (!selectedPiece || !selectedVersion || !draftKey || isReadOnly) {
+      return;
+    }
+
+    const body = (drafts[draftKey] ?? "").trim();
+
+    if (!body || pendingFeedbackKey === draftKey) {
+      return;
+    }
+
+    if (isVisualReviewMode) {
+      const feedback: PieceFeedback = {
+        author: "Tomi Preview",
+        body,
+        createdAtLabel: "Ahora",
+        id: `visual-feedback-${Date.now()}`,
+        sourceType: "TOMI",
+      };
+
+      addFeedbackOverride(selectedVersion.id, feedback);
+      setDrafts((current) => ({ ...current, [draftKey]: "" }));
+      return;
+    }
+
+    setPendingFeedbackKey(draftKey);
+
+    try {
+      const response = await fetch(`/api/pieces/${selectedPiece.id}/feedback`, {
+        body: JSON.stringify({
+          body,
+          pieceVersionId: selectedVersion.id,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Feedback request failed.");
+      }
+
+      const result = (await response.json()) as { feedback: PieceFeedback };
+
+      addFeedbackOverride(selectedVersion.id, result.feedback);
+      setDrafts((current) => ({ ...current, [draftKey]: "" }));
+      router.refresh();
+    } catch {
+      showToast({
+        description: "Tu texto sigue acá. Intentá nuevamente.",
+        title: "No pudimos guardar el feedback",
+        tone: "error",
+      });
+    } finally {
+      setPendingFeedbackKey(null);
+    }
+  }
+
   return (
     <>
       <PieceGrid
         onOpenPiece={navigateToPiece}
-        pieces={pieces}
-        reviewStates={reviewStates}
+        pieces={pieceItems}
+        reviewStates={Object.fromEntries(
+          pieceItems.map((piece) => [piece.id, piece.reviewState]),
+        )}
       />
 
       {selectedPiece && selectedVersion ? (
         <PieceReviewModal
           draft={drafts[draftKey] ?? ""}
-          hasNext={selectedIndex >= 0 && selectedIndex < pieces.length - 1}
+          hasNext={selectedIndex >= 0 && selectedIndex < pieceItems.length - 1}
           hasPrevious={selectedIndex > 0}
-          isVisualReviewMode={isVisualReviewMode}
+          isFeedbackSubmitting={pendingFeedbackKey === draftKey}
+          isReadOnly={isReadOnly}
+          isReviewSaving={pendingReviewPieceId === selectedPiece.id}
           onClose={closeModal}
           onDraftChange={updateDraft}
+          onFeedbackSubmit={submitFeedback}
           onNext={() => goToOffset(1)}
           onPrevious={() => goToOffset(-1)}
           onReviewStateChange={setSelectedReviewState}
           onVersionSelect={selectVersion}
           piece={selectedPiece}
-          reviewState={
-            reviewStates[selectedPiece.id] ?? selectedPiece.reviewState
-          }
+          reviewState={selectedPiece.reviewState}
           selectedVersion={selectedVersion}
         />
       ) : null}
     </>
   );
+
+  function setReviewOverride(pieceId: string, reviewState: ReviewState) {
+    setReviewOverrides((current) => {
+      const next = { ...current };
+
+      if (reviewState) {
+        next[pieceId] = reviewState;
+      } else {
+        delete next[pieceId];
+      }
+
+      return next;
+    });
+  }
+
+  function addFeedbackOverride(versionId: string, feedback: PieceFeedback) {
+    setFeedbackOverrides((current) => ({
+      ...current,
+      [versionId]: [...(current[versionId] ?? []), feedback],
+    }));
+  }
+}
+
+function mergeFeedback(
+  persistedFeedback: PieceFeedback[],
+  localFeedback: PieceFeedback[],
+) {
+  const seenFeedbackIds = new Set<string>();
+
+  return [...persistedFeedback, ...localFeedback].filter((feedback) => {
+    if (seenFeedbackIds.has(feedback.id)) {
+      return false;
+    }
+
+    seenFeedbackIds.add(feedback.id);
+
+    return true;
+  });
 }

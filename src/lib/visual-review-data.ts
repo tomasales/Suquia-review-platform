@@ -118,6 +118,7 @@ function visualPiece(
     reviewState,
     versions: [
       {
+        id: `visual-${deliveryKey}-piece-${position}-version-${versionNumber}`,
         fileSizeBytes: BigInt(280000),
         mimeType: "image/jpeg",
         versionNumber,
@@ -125,6 +126,7 @@ function visualPiece(
         storageKey: null,
         uploadedAt: new Date("2026-08-13T09:00:00"),
         uploadedBy: visualReviewAuthors[1],
+        feedback: [],
       },
     ],
   };
@@ -141,6 +143,7 @@ export type VisualReviewFeedbackItem = {
   author: string;
   body: string;
   createdAtLabel: string;
+  sourceType: "TOMI" | "DIRECTION" | "OTHER";
 };
 
 export type VisualReviewConversationItem = {
@@ -151,6 +154,7 @@ export type VisualReviewConversationItem = {
 };
 
 export type VisualReviewVersionData = {
+  id: string;
   fileSizeBytes?: number;
   versionNumber: number;
   uploadedAtLabel: string;
@@ -302,6 +306,7 @@ function version(
   },
 ): VisualReviewVersionData {
   return {
+    id: `${fileName.replace(/\.[^.]+$/, "")}-${versionNumber}`,
     versionNumber,
     uploadedAtLabel,
     imageSrc: `/visual-review/${fileName}`,
@@ -321,6 +326,7 @@ function feedback(
     author: "Tomi Preview",
     body,
     createdAtLabel,
+    sourceType: "TOMI",
   };
 }
 

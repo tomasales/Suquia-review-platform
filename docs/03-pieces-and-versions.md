@@ -26,6 +26,8 @@ Una pieza puede volver de **OK** a **Necesita cambios** si hace falta. No se deb
 
 Journal registra los cambios de estado de pieza.
 
+En la implementación inicial, mientras solo existe V1, el estado real de revisión se guarda en `Piece.reviewState`.
+
 ## Resumen por entrega
 
 Al terminar o durante una revisión, la entrega puede mostrar automáticamente un resumen como:
@@ -81,6 +83,10 @@ Cada versión debe guardar:
 - usuario que la subió;
 - feedback asociado;
 - referencias asociadas si corresponde.
+
+El feedback queda ligado a la `PieceVersion` exacta sobre la que fue escrito.
+
+Antes de implementar V2 se debe definir qué ocurre con `Piece.reviewState` cuando llega una nueva versión: si se reinicia a **Sin revisar**, si conserva el estado anterior o si se incorpora un historial de estado por versión.
 
 ## Fuera del MVP
 

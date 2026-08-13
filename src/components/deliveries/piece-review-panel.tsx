@@ -13,9 +13,12 @@ type ReviewState = Piece["reviewState"];
 
 type PieceReviewPanelProps = {
   draft: string;
-  isVisualReviewMode: boolean;
+  isFeedbackSubmitting: boolean;
   isMobileLayout?: boolean;
+  isReadOnly: boolean;
+  isReviewSaving: boolean;
   onDraftChange: (value: string) => void;
+  onFeedbackSubmit: () => void;
   onReviewStateChange: (reviewState: ReviewState) => void;
   onVersionSelect: (versionNumber: number) => void;
   piece: Piece;
@@ -25,9 +28,12 @@ type PieceReviewPanelProps = {
 
 export function PieceReviewPanel({
   draft,
-  isVisualReviewMode,
+  isFeedbackSubmitting,
+  isReadOnly,
+  isReviewSaving,
   isMobileLayout = false,
   onDraftChange,
+  onFeedbackSubmit,
   onReviewStateChange,
   onVersionSelect,
   piece,
@@ -106,7 +112,7 @@ export function PieceReviewPanel({
                   ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-50"
                   : ""
               }
-              disabled={!isVisualReviewMode}
+              disabled={isReadOnly || isReviewSaving}
               onClick={() => onReviewStateChange("OK")}
               size="sm"
               variant="secondary"
@@ -120,7 +126,7 @@ export function PieceReviewPanel({
                   ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-50"
                   : ""
               }
-              disabled={!isVisualReviewMode}
+              disabled={isReadOnly || isReviewSaving}
               onClick={() => onReviewStateChange("NEEDS_CHANGES")}
               size="sm"
               variant="secondary"
@@ -129,9 +135,9 @@ export function PieceReviewPanel({
               Necesita cambios
             </Button>
           </div>
-          {!isVisualReviewMode ? (
+          {isReadOnly ? (
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              Las acciones de revisión real se conectarán en una etapa posterior.
+              La entrega está cerrada.
             </p>
           ) : null}
         </section>
@@ -174,19 +180,30 @@ export function PieceReviewPanel({
           <div className="mt-3">
             <textarea
               className="min-h-24 w-full resize-none rounded-[8px] border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-subtle-foreground focus:border-subtle-foreground"
-              disabled={!isVisualReviewMode}
+              disabled={isReadOnly || isFeedbackSubmitting}
               onChange={(event) => onDraftChange(event.target.value)}
               placeholder="Escribir devolución..."
               value={draft}
             />
-            <button
-              className="mt-2 inline-flex min-h-10 items-center rounded-[8px] border border-border bg-surface px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface-muted disabled:pointer-events-none disabled:opacity-50 md:min-h-8"
-              disabled={!isVisualReviewMode}
-              type="button"
-            >
-              <Paperclip className="mr-1.5 size-4" strokeWidth={1.8} />
-              Adjuntar referencia
-            </button>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <Button
+                className="justify-start text-muted-foreground"
+                disabled
+                size="sm"
+                variant="secondary"
+              >
+                <Paperclip className="mr-1.5 size-4" strokeWidth={1.8} />
+                Adjuntar referencia
+              </Button>
+              <Button
+                disabled={isReadOnly || isFeedbackSubmitting || !draft.trim()}
+                onClick={onFeedbackSubmit}
+                size="sm"
+                variant="primary"
+              >
+                {isFeedbackSubmitting ? "Enviando…" : "Enviar feedback"}
+              </Button>
+            </div>
           </div>
         </section>
 
@@ -285,7 +302,7 @@ export function PieceReviewPanel({
                   ? "min-h-11 px-2 text-[13px] border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-50"
                   : "min-h-11 px-2 text-[13px]"
               }
-              disabled={!isVisualReviewMode}
+              disabled={isReadOnly || isReviewSaving}
               onClick={() => onReviewStateChange("OK")}
               size="md"
               variant="secondary"
@@ -299,7 +316,7 @@ export function PieceReviewPanel({
                   ? "min-h-11 px-2 text-[13px] border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-50"
                   : "min-h-11 px-2 text-[13px]"
               }
-              disabled={!isVisualReviewMode}
+              disabled={isReadOnly || isReviewSaving}
               onClick={() => onReviewStateChange("NEEDS_CHANGES")}
               size="md"
               variant="secondary"
