@@ -3,7 +3,6 @@ import { Sparkles } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { ButtonLink } from "@/components/ui/button-link";
-import { DataSection } from "@/components/ui/data-section";
 import { Surface } from "@/components/ui/surface";
 import { DeliveryTable } from "@/components/ui/delivery-table";
 import { listDeliveries, reviewQueueStatuses } from "@/lib/deliveries";
@@ -24,9 +23,9 @@ export default async function Home() {
         action={<ButtonLink href="/deliveries/new">Subir entrega</ButtonLink>}
       />
 
-      <section className="mt-6 grid gap-7 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="space-y-8">
-          <DataSection
+      <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="space-y-5">
+          <Surface
             action={
               <ButtonLink href="/deliveries" size="sm" variant="tertiary">
                 Ver todas
@@ -41,9 +40,9 @@ export default async function Home() {
                 No hay entregas pendientes de revisión.
               </p>
             )}
-          </DataSection>
+          </Surface>
 
-          <DataSection title="Entregas recientes">
+          <Surface title="Entregas recientes">
             {recentDeliveries.length > 0 ? (
               <DeliveryTable deliveries={recentDeliveries} variant="compact" />
             ) : (
@@ -51,7 +50,7 @@ export default async function Home() {
                 Las entregas que se envíen van a aparecer acá.
               </p>
             )}
-          </DataSection>
+          </Surface>
         </div>
 
         <aside>
