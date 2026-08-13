@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
 import { DeliveryTable } from "@/components/ui/delivery-table";
+import { Surface } from "@/components/ui/surface";
 import {
   listDeliveries,
   listDeliveryAuthors,
@@ -41,6 +42,7 @@ export default async function DeliveriesPage({
       />
 
       <section className="mt-5">
+        <Surface>
           <form
             action="/deliveries"
             className="grid items-end gap-2 border-b border-border pb-3 md:grid-cols-[minmax(120px,0.9fr)_minmax(160px,1fr)_minmax(160px,1fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)_auto]"
@@ -155,6 +157,7 @@ export default async function DeliveriesPage({
               </div>
             )}
           </div>
+        </Surface>
       </section>
     </AppShell>
   );

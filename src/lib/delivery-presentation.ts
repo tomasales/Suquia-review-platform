@@ -4,7 +4,14 @@ import {
   PieceReviewState,
 } from "@prisma/client";
 
-export type BadgeTone = "neutral" | "success" | "warning" | "danger" | "info";
+export type BadgeTone =
+  | "closed"
+  | "danger"
+  | "info"
+  | "neutral"
+  | "sent"
+  | "success"
+  | "warning";
 
 export const deliveryTypeLabel: Record<DeliveryType, string> = {
   [DeliveryType.STORIES]: "Stories",
@@ -20,11 +27,11 @@ export const deliveryStatusLabel: Record<DeliveryStatus, string> = {
 };
 
 export const deliveryStatusTone: Record<DeliveryStatus, BadgeTone> = {
-  [DeliveryStatus.SENT_FOR_REVIEW]: "neutral",
+  [DeliveryStatus.SENT_FOR_REVIEW]: "sent",
   [DeliveryStatus.IN_REVIEW]: "info",
   [DeliveryStatus.CHANGES_REQUESTED]: "warning",
   [DeliveryStatus.APPROVED]: "success",
-  [DeliveryStatus.CLOSED]: "neutral",
+  [DeliveryStatus.CLOSED]: "closed",
 };
 
 export const pieceReviewStateLabel: Record<PieceReviewState, string> = {
@@ -66,7 +73,7 @@ export function formatReviewSummary(
     (piece) => piece.reviewState === PieceReviewState.NEEDS_CHANGES,
   ).length;
   const unreviewed = total - ok - needsChanges;
-  const parts = [formatPieceCount(total)];
+  const parts: string[] = [];
 
   if (ok > 0) {
     parts.push(`${ok} OK`);
@@ -84,5 +91,5 @@ export function formatReviewSummary(
     parts.push(`${unreviewed} sin revisar`);
   }
 
-  return parts.join(" · ");
+  return parts.length > 0 ? parts.join(" · ") : "Sin revisar";
 }

@@ -1,6 +1,7 @@
+import { Sparkles } from "lucide-react";
+
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button-link";
 import { DataSection } from "@/components/ui/data-section";
 import { Surface } from "@/components/ui/surface";
@@ -23,7 +24,7 @@ export default async function Home() {
         action={<ButtonLink href="/deliveries/new">Subir entrega</ButtonLink>}
       />
 
-      <section className="mt-5 grid gap-6 xl:grid-cols-[minmax(0,1fr)_312px]">
+      <section className="mt-6 grid gap-7 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-8">
           <DataSection
             action={
@@ -53,31 +54,17 @@ export default async function Home() {
           </DataSection>
         </div>
 
-        <aside className="space-y-3">
-          <Surface compact title="Drive">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  Drive pendiente de configurar
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  El backup se activará cuando se integre Drive.
-                </p>
-              </div>
-              <Badge tone="warning">Pendiente</Badge>
-            </div>
-          </Surface>
-
-          <Surface compact title="Journal reciente">
-            <p className="text-sm text-muted-foreground">
-              Sin actividad registrada todavía.
-            </p>
-          </Surface>
-
+        <aside>
           <Surface compact title="Aprendizajes">
-            <p className="text-sm text-muted-foreground">
-              Los aprendizajes aparecerán a medida que se procese feedback.
-            </p>
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1.5 rounded-[7px] border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-medium text-violet-700">
+                <Sparkles className="size-3" strokeWidth={1.8} />
+                <span>Generado por IA</span>
+              </div>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Los aprendizajes aparecerán a medida que se procese feedback.
+              </p>
+            </div>
           </Surface>
         </aside>
       </section>

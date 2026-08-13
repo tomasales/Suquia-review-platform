@@ -18,7 +18,7 @@ export function DeliveryTable({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] border-collapse text-left">
         <thead>
-          <tr className="border-b border-border text-[11px] font-semibold uppercase tracking-[0.04em] text-subtle-foreground">
+          <tr className="border-y border-border bg-surface-muted/35 text-[11px] font-semibold uppercase tracking-[0.04em] text-subtle-foreground">
             <th className="py-2 pr-4">Entrega</th>
             <th className="py-2 pr-4">Tipo</th>
             <th className="py-2 pr-4">Piezas</th>

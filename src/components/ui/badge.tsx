@@ -2,15 +2,24 @@ import type { ReactNode } from "react";
 
 type BadgeProps = {
   children: ReactNode;
-  tone?: "neutral" | "success" | "warning" | "danger" | "info";
+  tone?:
+    | "closed"
+    | "danger"
+    | "info"
+    | "neutral"
+    | "sent"
+    | "success"
+    | "warning";
 };
 
 const tones = {
-  neutral: "border-border bg-surface-muted/70 text-muted-foreground",
-  success: "border-success/20 bg-success/8 text-success",
-  warning: "border-warning/20 bg-warning/8 text-warning",
-  danger: "border-destructive/20 bg-destructive/8 text-destructive",
-  info: "border-info/20 bg-info/8 text-info",
+  closed: "border-stone-300 bg-stone-100 text-stone-700",
+  danger: "border-red-200 bg-red-50 text-red-700",
+  info: "border-sky-200 bg-sky-50 text-sky-800",
+  neutral: "border-border bg-surface-muted text-muted-foreground",
+  sent: "border-indigo-200 bg-indigo-50 text-indigo-700",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  warning: "border-amber-300 bg-amber-50 text-amber-800",
 };
 
 export function Badge({ children, tone = "neutral" }: BadgeProps) {
