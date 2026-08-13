@@ -226,3 +226,11 @@ Usarla solo para valores como carpeta raíz Drive, flags de health check o confi
 - Estado de una entrega restaurada desde Drive.
 - Si Journal entra en búsqueda global.
 - Diferencias operativas entre Stories y Feed.
+
+## Decisiones de implementación inicial
+
+- Los IDs se implementan como UUID generados por Prisma (`uuid()`) para mantener identificadores inmutables y portables a manifest de Drive.
+- `Piece.latestVersionId` no se materializa en la base inicial; la última versión se deriva por `versionNumber DESC` para evitar una relación circular con `PieceVersion`.
+- Listas flexibles de AI Memory como categorías, tags, topics y referencias se modelan como arrays de texto de PostgreSQL. Metadata flexible, payloads técnicos y configuración central usan JSONB.
+- Las invariantes complejas de feedback, por ejemplo coherencia entre `level`, `pieceId` y `pieceVersionId`, quedan para validación de aplicación en módulos posteriores.
+- No se agregan índices Full Text Search en este módulo; el schema conserva texto estructurado para habilitar búsqueda en una etapa posterior.

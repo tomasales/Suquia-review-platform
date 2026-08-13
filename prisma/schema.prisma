@@ -1,0 +1,416 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DeliveryType {
+  STORIES
+  FEED
+}
+
+enum DeliveryStatus {
+  SENT_FOR_REVIEW
+  IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  CLOSED
+}
+
+enum PieceReviewState {
+  OK
+  NEEDS_CHANGES
+}
+
+enum FeedbackSourceType {
+  TOMI
+  DIRECTION
+  OTHER
+}
+
+enum FeedbackLevel {
+  DELIVERY
+  PIECE
+}
+
+enum SyncOperationStatus {
+  PENDING
+  SYNCING
+  FAILED
+  SYNCED
+}
+
+enum AIProcessingStatus {
+  PENDING
+  PROCESSING
+  FAILED
+  PROCESSED
+}
+
+enum DriveSyncStatus {
+  CONNECTED
+  CHECKING
+  PROBLEM
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  displayName        String
+  image              String?
+  isActive           Boolean   @default(true)
+  isAiLearningSource Boolean   @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  invitedEmails        AuthorizedEmail[]     @relation("AuthorizedEmailInviter")
+  createdDeliveries    Delivery[]            @relation("DeliveryCreator")
+  deletedDeliveries    Delivery[]            @relation("DeliveryDeletedBy")
+  uploadedVersions     PieceVersion[]        @relation("PieceVersionUploader")
+  authoredFeedback     Feedback[]            @relation("FeedbackAuthor")
+  uploadedAttachments  FeedbackAttachment[]  @relation("FeedbackAttachmentUploader")
+  conversationReplies  ConversationReply[]   @relation("ConversationReplyAuthor")
+  journalEvents        JournalEvent[]        @relation("JournalEventActor")
+  uploadedGuidelines   Guideline[]           @relation("GuidelineUploader")
+  syncOperations       SyncOperation[]       @relation("SyncOperationCreator")
+  deletedEntries       DeletedEntry[]        @relation("DeletedEntryDeletedBy")
+  systemConfigurations SystemConfiguration[] @relation("SystemConfigurationUpdater")
+
+  @@index([isAiLearningSource])
+  @@index([isActive])
+}
+
+model AuthorizedEmail {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  active          Boolean  @default(true)
+  note            String?
+  invitedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  invitedBy User? @relation("AuthorizedEmailInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([active])
+  @@index([invitedByUserId])
+}
+
+model Delivery {
+  id                  String         @id @default(uuid())
+  generatedTitle      String
+  type                DeliveryType
+  status              DeliveryStatus @default(SENT_FOR_REVIEW)
+  generalNote         String?
+  createdByUserId     String
+  submittedAt         DateTime?
+  closedAt            DateTime?
+  deletedAt           DateTime?
+  deletedByUserId     String?
+  driveFolderId       String?
+  driveManifestFileId String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  creator            User               @relation("DeliveryCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  deletedBy          User?              @relation("DeliveryDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
+  pieces             Piece[]
+  feedback           Feedback[]
+  journalEvents      JournalEvent[]
+  syncOperations     SyncOperation[]
+  deletedEntry       DeletedEntry?
+  aiKnowledgeEntries AIKnowledgeEntry[]
+
+  @@index([type])
+  @@index([status])
+  @@index([submittedAt])
+  @@index([createdByUserId])
+  @@index([deletedAt])
+  @@index([createdAt])
+}
+
+model Piece {
+  id          String            @id @default(uuid())
+  deliveryId  String
+  position    Int
+  initialNote String?
+  reviewState PieceReviewState?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  delivery           Delivery           @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  versions           PieceVersion[]
+  feedback           Feedback[]
+  aiKnowledgeEntries AIKnowledgeEntry[]
+
+  @@unique([deliveryId, position])
+  @@index([reviewState])
+  @@index([deliveryId])
+}
+
+model PieceVersion {
+  id               String   @id @default(uuid())
+  pieceId          String
+  versionNumber    Int
+  uploadedByUserId String
+  originalFilename String
+  mimeType         String
+  fileSizeBytes    BigInt
+  storageKey       String?
+  driveFileId      String?
+  driveFolderId    String?
+  checksum         String?
+  uploadedAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  piece              Piece              @relation(fields: [pieceId], references: [id], onDelete: Restrict)
+  uploadedBy         User               @relation("PieceVersionUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  feedback           Feedback[]
+  aiKnowledgeEntries AIKnowledgeEntry[]
+
+  @@unique([pieceId, versionNumber])
+  @@index([uploadedAt])
+  @@index([uploadedByUserId])
+  @@index([driveFileId])
+}
+
+model Feedback {
+  id             String             @id @default(uuid())
+  deliveryId     String
+  pieceId        String?
+  pieceVersionId String?
+  authorUserId   String
+  sourceType     FeedbackSourceType
+  level          FeedbackLevel
+  body           String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  delivery            Delivery             @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  piece               Piece?               @relation(fields: [pieceId], references: [id], onDelete: Restrict)
+  pieceVersion        PieceVersion?        @relation(fields: [pieceVersionId], references: [id], onDelete: Restrict)
+  author              User                 @relation("FeedbackAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+  attachments         FeedbackAttachment[]
+  conversationReplies ConversationReply[]
+  aiProcessingJobs    AIProcessingJob[]
+  aiKnowledgeEntries  AIKnowledgeEntry[]
+
+  @@index([deliveryId])
+  @@index([pieceId])
+  @@index([pieceVersionId])
+  @@index([authorUserId])
+  @@index([sourceType])
+  @@index([level])
+  @@index([createdAt])
+}
+
+model FeedbackAttachment {
+  id               String   @id @default(uuid())
+  feedbackId       String
+  uploadedByUserId String
+  originalFilename String
+  mimeType         String
+  fileSizeBytes    BigInt
+  storageKey       String?
+  driveFileId      String?
+  createdAt        DateTime @default(now())
+
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Restrict)
+  uploadedBy User     @relation("FeedbackAttachmentUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([feedbackId])
+  @@index([uploadedByUserId])
+  @@index([driveFileId])
+}
+
+model ConversationReply {
+  id           String   @id @default(uuid())
+  feedbackId   String
+  authorUserId String
+  body         String
+  createdAt    DateTime @default(now())
+
+  feedback Feedback @relation(fields: [feedbackId], references: [id], onDelete: Restrict)
+  author   User     @relation("ConversationReplyAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([feedbackId])
+  @@index([authorUserId])
+  @@index([createdAt])
+}
+
+model JournalEvent {
+  id          String   @id @default(uuid())
+  deliveryId  String?
+  actorUserId String?
+  eventType   String
+  entityType  String
+  entityId    String?
+  metadata    Json
+  createdAt   DateTime @default(now())
+
+  delivery Delivery? @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  actor    User?     @relation("JournalEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([deliveryId])
+  @@index([actorUserId])
+  @@index([eventType])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model Guideline {
+  id               String   @id @default(uuid())
+  title            String
+  description      String?
+  type             String
+  uploadedByUserId String
+  originalFilename String
+  mimeType         String
+  fileSizeBytes    BigInt
+  storageKey       String?
+  driveFileId      String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  uploadedBy User @relation("GuidelineUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([title])
+  @@index([type])
+  @@index([active])
+  @@index([uploadedByUserId])
+}
+
+model DriveSyncState {
+  id               String          @id @default(uuid())
+  key              String          @unique
+  status           DriveSyncStatus @default(CHECKING)
+  lastCheckedAt    DateTime?
+  lastSuccessAt    DateTime?
+  lastErrorCode    String?
+  lastErrorMessage String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([status])
+}
+
+model SyncOperation {
+  id              String              @id @default(uuid())
+  type            String
+  status          SyncOperationStatus @default(PENDING)
+  deliveryId      String?
+  entityType      String?
+  entityId        String?
+  payload         Json
+  attempts        Int                 @default(0)
+  lastError       String?
+  createdByUserId String?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  delivery  Delivery? @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  createdBy User?     @relation("SyncOperationCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([type])
+  @@index([deliveryId])
+  @@index([createdByUserId])
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}
+
+model DeletedEntry {
+  id                   String   @id @default(uuid())
+  deliveryId           String   @unique
+  deletedByUserId      String
+  deletedAt            DateTime
+  driveFolderId        String
+  manifestFileId       String
+  deletedEntriesFileId String?
+  restoreStatus        String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  delivery  Delivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  deletedBy User     @relation("DeletedEntryDeletedBy", fields: [deletedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([deletedAt])
+  @@index([deletedByUserId])
+}
+
+model AIKnowledgeEntry {
+  id                  String   @id @default(uuid())
+  sourceFeedbackId    String
+  sourceDeliveryId    String
+  sourcePieceId       String?
+  sourceVersionId     String?
+  rawFeedbackSnapshot String
+  summary             String
+  categories          String[] @default([])
+  tags                String[] @default([])
+  topics              String[] @default([])
+  inferredImportance  Int?
+  recurrence          String?
+  relatedEntryIds     String[] @default([])
+  visualReferenceIds  String[] @default([])
+  provider            String?
+  model               String?
+  schemaVersion       String
+  confidence          Float?
+  processedAt         DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  sourceFeedback Feedback      @relation(fields: [sourceFeedbackId], references: [id], onDelete: Restrict)
+  sourceDelivery Delivery      @relation(fields: [sourceDeliveryId], references: [id], onDelete: Restrict)
+  sourcePiece    Piece?        @relation(fields: [sourcePieceId], references: [id], onDelete: Restrict)
+  sourceVersion  PieceVersion? @relation(fields: [sourceVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceFeedbackId, schemaVersion])
+  @@index([sourceDeliveryId])
+  @@index([sourcePieceId])
+  @@index([sourceVersionId])
+  @@index([processedAt])
+}
+
+model AIProcessingJob {
+  id                   String             @id @default(uuid())
+  feedbackId           String
+  status               AIProcessingStatus @default(PENDING)
+  provider             String?
+  model                String?
+  schemaVersion        String
+  attempts             Int                @default(0)
+  lastError            String?
+  costEstimateMetadata Json?
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  feedback Feedback @relation(fields: [feedbackId], references: [id], onDelete: Restrict)
+
+  @@unique([feedbackId, schemaVersion])
+  @@index([status])
+  @@index([feedbackId])
+  @@index([schemaVersion])
+  @@index([createdAt])
+}
+
+model SystemConfiguration {
+  key             String   @id
+  value           Json
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  updatedBy User? @relation("SystemConfigurationUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([updatedByUserId])
+}
