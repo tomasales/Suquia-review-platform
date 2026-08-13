@@ -44,15 +44,23 @@ export function buildPendingStorageKey({
 export function buildPieceVersionStorageKey({
   deliveryId,
   filename,
+  nextVersionNumber,
   pieceId,
   versionNumber,
 }: {
   deliveryId: string;
   filename: string;
+  nextVersionNumber?: number;
   pieceId: string;
-  versionNumber: number;
+  versionNumber?: number;
 }) {
-  return `deliveries/${deliveryId}/pieces/${pieceId}/v${versionNumber}/${createStorageUuid()}-${sanitizeFilename(
+  const resolvedVersionNumber = nextVersionNumber ?? versionNumber;
+
+  if (!resolvedVersionNumber) {
+    throw new StorageValidationError("Versión de pieza requerida.");
+  }
+
+  return `deliveries/${deliveryId}/pieces/${pieceId}/v${resolvedVersionNumber}/${createStorageUuid()}-${sanitizeFilename(
     filename,
   )}`;
 }

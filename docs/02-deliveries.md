@@ -127,6 +127,8 @@ Durante el MVP, las acciones reales de revisión por pieza actualizan el estado 
 
 Cuando se agrega feedback por pieza a una entrega en **Enviado para revisar**, la entrega pasa a **En revisión**.
 
+Cuando se sube una nueva versión de una pieza existente, la entrega vuelve a quedar **Enviado para revisar** si estaba en otro estado abierto. La nueva versión queda **Sin revisar**.
+
 Las entregas **Cerradas** quedan en modo lectura para revisión y feedback.
 
 ## Flujo típico

@@ -64,7 +64,15 @@ const deliveryListSelect = {
   },
   pieces: {
     select: {
-      reviewState: true,
+      versions: {
+        orderBy: {
+          versionNumber: "desc",
+        },
+        select: {
+          reviewState: true,
+        },
+        take: 1,
+      },
     },
   },
 } satisfies Prisma.DeliverySelect;
@@ -92,7 +100,6 @@ const deliveryDetailSelect = {
       id: true,
       position: true,
       initialNote: true,
-      reviewState: true,
       versions: {
         orderBy: {
           versionNumber: "desc",
@@ -103,6 +110,7 @@ const deliveryDetailSelect = {
           mimeType: true,
           versionNumber: true,
           originalFilename: true,
+          reviewState: true,
           storageKey: true,
           uploadedAt: true,
           uploadedBy: {
@@ -140,6 +148,10 @@ const deliveryDetailSelect = {
 export type DeliveryListRecord = Prisma.DeliveryGetPayload<{
   select: typeof deliveryListSelect;
 }>;
+
+type DeliveryListLike = Omit<DeliveryListRecord, "pieces"> & {
+  pieces: Array<{ reviewState: PieceReviewState | null }>;
+};
 
 export type DeliveryDetailRecord = Prisma.DeliveryGetPayload<{
   select: typeof deliveryDetailSelect;
@@ -190,6 +202,7 @@ export async function listDeliveries(
         matchesVisualReviewFilters(delivery, filters, options.statuses),
       )
       .slice(0, options.take)
+      .map(normalizeDeliveryListRecord)
       .map(toDeliveryListItem);
   }
 
@@ -205,7 +218,7 @@ export async function listDeliveries(
     select: deliveryListSelect,
   });
 
-  return deliveries.map(toDeliveryListItem);
+  return deliveries.map(normalizeDeliveryListRecord).map(toDeliveryListItem);
 }
 
 export async function getDeliveryById(id: string) {
@@ -313,7 +326,18 @@ function buildDeliveryWhere(
   };
 }
 
-function toDeliveryListItem(delivery: DeliveryListRecord) {
+function normalizeDeliveryListRecord(
+  delivery: DeliveryListRecord | DeliveryDetailRecord,
+): DeliveryListLike {
+  return {
+    ...delivery,
+    pieces: delivery.pieces.map((piece) => ({
+      reviewState: getCurrentPieceReviewState(piece),
+    })),
+  };
+}
+
+function toDeliveryListItem(delivery: DeliveryListLike) {
   const effectiveDate = delivery.submittedAt ?? delivery.createdAt;
   const authorLabel = delivery.creator.name ?? delivery.creator.email;
 
@@ -335,18 +359,27 @@ function toDeliveryListItem(delivery: DeliveryListRecord) {
 }
 
 async function toDeliveryDetail(delivery: DeliveryDetailRecord) {
-  const listItem = toDeliveryListItem({
-    ...delivery,
-    pieces: delivery.pieces.map((piece) => ({
-      reviewState: piece.reviewState,
-    })),
-  });
+  const listItem = toDeliveryListItem(normalizeDeliveryListRecord(delivery));
   const pieces = await Promise.all(
     delivery.pieces.map(async (piece) => {
       const latestVersion = piece.versions[0] ?? null;
       const visualReviewData = getVisualReviewPieceData(piece.id);
       const versions =
-        visualReviewData?.versions ??
+        visualReviewData?.versions.map((version) => {
+          const persistedVersion = piece.versions.find(
+            (item) => item.versionNumber === version.versionNumber,
+          );
+          const reviewState = persistedVersion?.reviewState ?? null;
+
+          return {
+            ...version,
+            reviewState,
+            reviewStateLabel: reviewState
+              ? pieceReviewStateLabel[reviewState]
+              : "Sin revisar",
+            reviewStateTone: getPieceReviewTone(reviewState),
+          };
+        }) ??
         (await Promise.all(
           piece.versions.map(async (version) => {
             const readUrl = version.storageKey
@@ -360,6 +393,11 @@ async function toDeliveryDetail(delivery: DeliveryDetailRecord) {
               fileSizeBytes: Number(version.fileSizeBytes),
               mimeType: version.mimeType,
               originalFilename: version.originalFilename,
+              reviewState: version.reviewState,
+              reviewStateLabel: version.reviewState
+                ? pieceReviewStateLabel[version.reviewState]
+                : "Sin revisar",
+              reviewStateTone: getPieceReviewTone(version.reviewState),
               versionNumber: version.versionNumber,
               uploadedAtLabel: formatDeliveryDate(version.uploadedAt),
               uploaderLabel: version.uploadedBy.name ?? version.uploadedBy.email,
@@ -381,18 +419,23 @@ async function toDeliveryDetail(delivery: DeliveryDetailRecord) {
         id: piece.id,
         position: piece.position,
         initialNote: piece.initialNote,
-        reviewState: piece.reviewState,
-        reviewStateLabel: piece.reviewState
-          ? pieceReviewStateLabel[piece.reviewState]
+        reviewState: latestVersion?.reviewState ?? null,
+        reviewStateLabel: latestVersion?.reviewState
+          ? pieceReviewStateLabel[latestVersion.reviewState]
           : "Sin revisar",
-        reviewStateTone: getPieceReviewTone(piece.reviewState),
+        reviewStateTone: getPieceReviewTone(latestVersion?.reviewState ?? null),
         aspect: visualReviewData?.aspect ?? getPieceAspect(delivery.type),
         versions,
         latestVersion: latestVersion
           ? {
+              id: latestVersion.id,
               fileSizeBytes: Number(latestVersion.fileSizeBytes),
               mimeType: latestVersion.mimeType,
               originalFilename: latestVersion.originalFilename,
+              reviewState: latestVersion.reviewState,
+              reviewStateLabel: latestVersion.reviewState
+                ? pieceReviewStateLabel[latestVersion.reviewState]
+                : "Sin revisar",
               uploadedAtLabel: formatDeliveryDate(latestVersion.uploadedAt),
               uploaderLabel:
                 latestVersion.uploadedBy.name ?? latestVersion.uploadedBy.email,
@@ -419,6 +462,12 @@ const feedbackDateFormatter = new Intl.DateTimeFormat("es-AR", {
 
 function formatFeedbackDate(date: Date) {
   return feedbackDateFormatter.format(date);
+}
+
+function getCurrentPieceReviewState(piece: {
+  versions: Array<{ reviewState: PieceReviewState | null }>;
+}) {
+  return piece.versions[0]?.reviewState ?? null;
 }
 
 function getPieceAspect(deliveryType: DeliveryType) {

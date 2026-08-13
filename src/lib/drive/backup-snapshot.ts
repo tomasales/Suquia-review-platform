@@ -107,29 +107,34 @@ export async function getDeliveryBackupSnapshot(deliveryId: string) {
       id: event.id,
       metadata: event.metadata,
     })),
-    pieces: delivery.pieces.map((piece) => ({
-      createdAt: piece.createdAt,
-      deliveryId: piece.deliveryId,
-      id: piece.id,
-      initialNote: piece.initialNote,
-      position: piece.position,
-      reviewState: piece.reviewState,
-      updatedAt: piece.updatedAt,
-      versions: piece.versions.map((version) => ({
-        checksum: version.checksum,
-        createdAt: version.createdAt,
-        driveFileId: version.driveFileId,
-        driveFolderId: version.driveFolderId,
-        fileSizeBytes: version.fileSizeBytes,
-        id: version.id,
-        mimeType: version.mimeType,
-        originalFilename: version.originalFilename,
-        storageKey: version.storageKey,
-        uploadedAt: version.uploadedAt,
-        uploadedBy: version.uploadedBy,
-        uploadedByUserId: version.uploadedByUserId,
-        versionNumber: version.versionNumber,
-      })),
-    })),
+    pieces: delivery.pieces.map((piece) => {
+      const latestVersion = piece.versions.at(-1) ?? null;
+
+      return {
+        createdAt: piece.createdAt,
+        currentReviewState: latestVersion?.reviewState ?? null,
+        deliveryId: piece.deliveryId,
+        id: piece.id,
+        initialNote: piece.initialNote,
+        position: piece.position,
+        updatedAt: piece.updatedAt,
+        versions: piece.versions.map((version) => ({
+          checksum: version.checksum,
+          createdAt: version.createdAt,
+          driveFileId: version.driveFileId,
+          driveFolderId: version.driveFolderId,
+          fileSizeBytes: version.fileSizeBytes,
+          id: version.id,
+          mimeType: version.mimeType,
+          originalFilename: version.originalFilename,
+          reviewState: version.reviewState,
+          storageKey: version.storageKey,
+          uploadedAt: version.uploadedAt,
+          uploadedBy: version.uploadedBy,
+          uploadedByUserId: version.uploadedByUserId,
+          versionNumber: version.versionNumber,
+        })),
+      };
+    }),
   } satisfies DeliveryBackupSnapshot;
 }

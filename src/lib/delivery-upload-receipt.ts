@@ -16,13 +16,32 @@ export type DeliveryUploadReceiptPiece = {
   storageKey: string;
 };
 
-export type DeliveryUploadReceiptPayload = {
-  deliveryId: string;
+type BaseUploadReceiptPayload = {
   expiresAt: number;
   issuedAt: number;
+  kind: "delivery-creation" | "piece-version-upload";
+  userId: string;
+};
+
+export type DeliveryUploadReceiptPayload = BaseUploadReceiptPayload & {
+  deliveryId: string;
+  kind: "delivery-creation";
   pieces: DeliveryUploadReceiptPiece[];
   type: "STORIES" | "FEED";
-  userId: string;
+};
+
+export type PieceVersionUploadReceiptPayload = BaseUploadReceiptPayload & {
+  deliveryId: string;
+  fileSizeBytes: number;
+  filename: string;
+  kind: "piece-version-upload";
+  mimeType: string;
+  newPieceVersionId: string;
+  nextVersionNumber: number;
+  pieceId: string;
+  previousLatestVersionId: string;
+  previousLatestVersionNumber: number;
+  storageKey: string;
 };
 
 type CreateReceiptOptions = {
@@ -36,7 +55,7 @@ type VerifyReceiptOptions = {
 };
 
 export function createDeliveryUploadReceipt(
-  payload: Omit<DeliveryUploadReceiptPayload, "expiresAt" | "issuedAt">,
+  payload: Omit<DeliveryUploadReceiptPayload, "expiresAt" | "issuedAt" | "kind">,
   options: CreateReceiptOptions = {},
 ) {
   const now = options.now ?? new Date();
@@ -45,6 +64,7 @@ export function createDeliveryUploadReceipt(
     deliveryId: payload.deliveryId,
     expiresAt: issuedAt + DELIVERY_UPLOAD_RECEIPT_EXPIRES_IN_SECONDS,
     issuedAt,
+    kind: "delivery-creation",
     pieces: payload.pieces.map((piece) => ({
       fileSizeBytes: piece.fileSizeBytes,
       filename: piece.filename,
@@ -56,15 +76,73 @@ export function createDeliveryUploadReceipt(
     type: payload.type,
     userId: payload.userId,
   };
-  const encodedPayload = base64UrlEncode(
-    JSON.stringify(sortJsonValue(receiptPayload)),
-  );
+
+  return createUploadReceiptToken(receiptPayload, options);
+}
+
+export function verifyDeliveryUploadReceipt(
+  token: string,
+  options: VerifyReceiptOptions = {},
+) {
+  const payload = verifyUploadReceipt(token, options);
+
+  if (payload.kind !== "delivery-creation") {
+    throw new StorageValidationError("Receipt de subida inválido.");
+  }
+
+  return payload;
+}
+
+export function createPieceVersionUploadReceipt(
+  payload: Omit<PieceVersionUploadReceiptPayload, "expiresAt" | "issuedAt" | "kind">,
+  options: CreateReceiptOptions = {},
+) {
+  const now = options.now ?? new Date();
+  const issuedAt = Math.floor(now.getTime() / 1000);
+  const receiptPayload: PieceVersionUploadReceiptPayload = {
+    deliveryId: payload.deliveryId,
+    expiresAt: issuedAt + DELIVERY_UPLOAD_RECEIPT_EXPIRES_IN_SECONDS,
+    fileSizeBytes: payload.fileSizeBytes,
+    filename: payload.filename,
+    issuedAt,
+    kind: "piece-version-upload",
+    mimeType: payload.mimeType,
+    newPieceVersionId: payload.newPieceVersionId,
+    nextVersionNumber: payload.nextVersionNumber,
+    pieceId: payload.pieceId,
+    previousLatestVersionId: payload.previousLatestVersionId,
+    previousLatestVersionNumber: payload.previousLatestVersionNumber,
+    storageKey: payload.storageKey,
+    userId: payload.userId,
+  };
+
+  return createUploadReceiptToken(receiptPayload, options);
+}
+
+export function verifyPieceVersionUploadReceipt(
+  token: string,
+  options: VerifyReceiptOptions = {},
+) {
+  const payload = verifyUploadReceipt(token, options);
+
+  if (payload.kind !== "piece-version-upload") {
+    throw new StorageValidationError("Receipt de subida inválido.");
+  }
+
+  return payload;
+}
+
+function createUploadReceiptToken(
+  payload: DeliveryUploadReceiptPayload | PieceVersionUploadReceiptPayload,
+  options: CreateReceiptOptions,
+) {
+  const encodedPayload = base64UrlEncode(JSON.stringify(sortJsonValue(payload)));
   const signature = signEncodedPayload(encodedPayload, getReceiptSecret(options));
 
   return `${encodedPayload}.${signature}`;
 }
 
-export function verifyDeliveryUploadReceipt(
+function verifyUploadReceipt(
   token: string,
   options: VerifyReceiptOptions = {},
 ) {
@@ -94,7 +172,7 @@ export function verifyDeliveryUploadReceipt(
 }
 
 export function assertDeliveryUploadReceiptUser(
-  payload: DeliveryUploadReceiptPayload,
+  payload: DeliveryUploadReceiptPayload | PieceVersionUploadReceiptPayload,
   userId: string,
 ) {
   if (payload.userId !== userId) {
@@ -112,7 +190,9 @@ export function getReceiptSecret(options: { secret?: string } = {}) {
   return secret;
 }
 
-function parseReceiptPayload(encodedPayload: string): DeliveryUploadReceiptPayload {
+function parseReceiptPayload(
+  encodedPayload: string,
+): DeliveryUploadReceiptPayload | PieceVersionUploadReceiptPayload {
   let payload: unknown;
 
   try {
@@ -126,9 +206,20 @@ function parseReceiptPayload(encodedPayload: string): DeliveryUploadReceiptPaylo
     typeof payload.deliveryId !== "string" ||
     typeof payload.expiresAt !== "number" ||
     typeof payload.issuedAt !== "number" ||
-    !Array.isArray(payload.pieces) ||
-    (payload.type !== "STORIES" && payload.type !== "FEED") ||
+    (payload.kind !== "delivery-creation" &&
+      payload.kind !== "piece-version-upload") ||
     typeof payload.userId !== "string"
+  ) {
+    throw new StorageValidationError("Receipt de subida inválido.");
+  }
+
+  if (payload.kind === "piece-version-upload") {
+    return parsePieceVersionUploadReceiptPayload(payload);
+  }
+
+  if (
+    !Array.isArray(payload.pieces) ||
+    (payload.type !== "STORIES" && payload.type !== "FEED")
   ) {
     throw new StorageValidationError("Receipt de subida inválido.");
   }
@@ -137,9 +228,45 @@ function parseReceiptPayload(encodedPayload: string): DeliveryUploadReceiptPaylo
     deliveryId: payload.deliveryId,
     expiresAt: payload.expiresAt,
     issuedAt: payload.issuedAt,
+    kind: "delivery-creation",
     pieces: payload.pieces.map(parseReceiptPiece),
     type: payload.type,
     userId: payload.userId,
+  };
+}
+
+function parsePieceVersionUploadReceiptPayload(
+  payload: Record<string, unknown>,
+): PieceVersionUploadReceiptPayload {
+  if (
+    typeof payload.fileSizeBytes !== "number" ||
+    typeof payload.filename !== "string" ||
+    typeof payload.mimeType !== "string" ||
+    typeof payload.newPieceVersionId !== "string" ||
+    typeof payload.nextVersionNumber !== "number" ||
+    typeof payload.pieceId !== "string" ||
+    typeof payload.previousLatestVersionId !== "string" ||
+    typeof payload.previousLatestVersionNumber !== "number" ||
+    typeof payload.storageKey !== "string"
+  ) {
+    throw new StorageValidationError("Receipt de subida inválido.");
+  }
+
+  return {
+    deliveryId: payload.deliveryId as string,
+    expiresAt: payload.expiresAt as number,
+    fileSizeBytes: payload.fileSizeBytes,
+    filename: payload.filename,
+    issuedAt: payload.issuedAt as number,
+    kind: "piece-version-upload",
+    mimeType: payload.mimeType,
+    newPieceVersionId: payload.newPieceVersionId,
+    nextVersionNumber: payload.nextVersionNumber,
+    pieceId: payload.pieceId,
+    previousLatestVersionId: payload.previousLatestVersionId,
+    previousLatestVersionNumber: payload.previousLatestVersionNumber,
+    storageKey: payload.storageKey,
+    userId: payload.userId as string,
   };
 }
 

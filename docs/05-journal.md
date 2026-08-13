@@ -48,9 +48,10 @@ Ejemplos de eventos:
 
 - Toda modificación de estado de entrega debe registrarse.
 - Todo cambio de estado de pieza debe registrarse.
-- El cambio de estado de pieza se registra como `PIECE_REVIEW_STATE_CHANGED` con estado anterior, estado nuevo y versión vigente cuando exista.
+- El cambio de estado de pieza se registra como `PIECE_REVIEW_STATE_CHANGED` con estado anterior, estado nuevo y la `PieceVersion` vigente.
+- La subida de una nueva versión se registra como `PIECE_VERSION_UPLOADED`.
 - El feedback agregado se registra como `FEEDBACK_ADDED` sin copiar el cuerpo del comentario dentro del Journal.
-- Si una acción de revisión o feedback cambia el estado de la entrega, también se registra `DELIVERY_STATUS_CHANGED`.
+- Si una acción de revisión, feedback o nueva versión cambia el estado de la entrega, también se registra `DELIVERY_STATUS_CHANGED`.
 - El backup Drive regenera `journal.jsonl` desde los eventos existentes en PostgreSQL. Los eventos de infraestructura `DRIVE_BACKUP_SYNCED` y `DRIVE_BACKUP_FAILED` pueden aparecer en Drive recién a partir de un refresh posterior; no generan por sí mismos otra operación de backup para evitar loops.
 - Toda eliminación y restauración de entrega debe registrarse.
 - Fallos, reintentos y recuperaciones de sincronización deben registrarse.

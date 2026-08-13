@@ -34,19 +34,25 @@ const feedbackDateFormatter = new Intl.DateTimeFormat("es-AR", {
 
 export async function updatePieceReviewState({
   pieceId,
+  pieceVersionId,
   reviewState,
   userId,
 }: {
   pieceId: string;
+  pieceVersionId: unknown;
   reviewState: unknown;
   userId: string;
 }) {
   const nextReviewState = parsePieceReviewState(reviewState);
+
+  if (typeof pieceVersionId !== "string" || !pieceVersionId.trim()) {
+    throw new PieceReviewValidationError("Versión de pieza inválida.");
+  }
+
   const piece = await db.piece.findUnique({
     where: { id: pieceId },
     select: {
       id: true,
-      reviewState: true,
       delivery: {
         select: {
           deletedAt: true,
@@ -60,6 +66,7 @@ export async function updatePieceReviewState({
         },
         select: {
           id: true,
+          reviewState: true,
           versionNumber: true,
         },
         take: 1,
@@ -73,9 +80,18 @@ export async function updatePieceReviewState({
 
   assertDeliveryCanBeReviewed(piece.delivery.status);
 
+  const latestVersion = piece.versions[0] ?? null;
+
+  if (!latestVersion || latestVersion.id !== pieceVersionId) {
+    throw new PieceReviewValidationError(
+      "Esta versión ya forma parte del historial.",
+      409,
+    );
+  }
+
   if (
     isPieceReviewStateNoop({
-      currentState: piece.reviewState,
+      currentState: latestVersion.reviewState,
       nextState: nextReviewState,
     })
   ) {
@@ -86,24 +102,23 @@ export async function updatePieceReviewState({
       },
       piece: {
         id: piece.id,
-        reviewState: piece.reviewState,
+        reviewState: latestVersion.reviewState,
       },
     };
   }
 
-  const latestVersion = piece.versions[0] ?? null;
   const nextDeliveryStatus = getDeliveryStatusAfterPieceReview({
     currentStatus: piece.delivery.status,
     nextReviewState,
   });
 
   await db.$transaction(async (tx) => {
-    await tx.piece.update({
+    await tx.pieceVersion.update({
       data: {
         reviewState: nextReviewState,
       },
       where: {
-        id: piece.id,
+        id: latestVersion.id,
       },
     });
 
@@ -127,9 +142,9 @@ export async function updatePieceReviewState({
         eventType: "PIECE_REVIEW_STATE_CHANGED",
         metadata: buildPieceReviewJournalMetadata({
           nextState: nextReviewState,
-          pieceVersionId: latestVersion?.id ?? null,
-          previousState: piece.reviewState,
-          versionNumber: latestVersion?.versionNumber ?? null,
+          pieceVersionId: latestVersion.id,
+          previousState: latestVersion.reviewState,
+          versionNumber: latestVersion.versionNumber,
         }),
       },
     });
@@ -168,6 +183,7 @@ export async function updatePieceReviewState({
     piece: {
       id: piece.id,
       reviewState: nextReviewState,
+      versionId: latestVersion.id,
     },
   };
 }
@@ -200,6 +216,15 @@ export async function addPieceFeedback({
           status: true,
         },
       },
+      versions: {
+        orderBy: {
+          versionNumber: "desc",
+        },
+        select: {
+          id: true,
+        },
+        take: 1,
+      },
     },
   });
 
@@ -221,6 +246,13 @@ export async function addPieceFeedback({
 
   if (!version) {
     throw new PieceReviewValidationError("La versión no corresponde a esta pieza.");
+  }
+
+  if (piece.versions[0]?.id !== version.id) {
+    throw new PieceReviewValidationError(
+      "Esta versión ya forma parte del historial.",
+      409,
+    );
   }
 
   const sourceType = getFeedbackSourceType(user.isAiLearningSource);

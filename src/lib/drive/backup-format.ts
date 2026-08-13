@@ -27,6 +27,7 @@ export type BackupPieceVersion = {
   id: string;
   mimeType: string;
   originalFilename: string;
+  reviewState: PieceReviewState | null;
   storageKey: string | null;
   uploadedAt: Date;
   uploadedBy: BackupUser;
@@ -40,7 +41,7 @@ export type BackupPiece = {
   id: string;
   initialNote: string | null;
   position: number;
-  reviewState: PieceReviewState | null;
+  currentReviewState: PieceReviewState | null;
   updatedAt: Date;
   versions: BackupPieceVersion[];
 };
@@ -258,13 +259,13 @@ export function buildPieceMetadata({
   piece: BackupPiece;
 }) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     piece: {
+      currentReviewState: piece.currentReviewState,
       deliveryId: piece.deliveryId,
       id: piece.id,
       initialNote: piece.initialNote,
       position: piece.position,
-      reviewState: piece.reviewState,
     },
     versions: piece.versions.map((version) => ({
       driveFileId:
@@ -274,6 +275,7 @@ export function buildPieceMetadata({
       mimeType: version.mimeType,
       originalFilename: version.originalFilename,
       relativePath: getPieceVersionAssetRelativePath({ piece, version }),
+      reviewState: version.reviewState,
       uploadedAt: version.uploadedAt.toISOString(),
       uploadedByUserId: version.uploadedByUserId,
       versionNumber: version.versionNumber,
@@ -291,7 +293,7 @@ export function buildDeliveryManifest({
   snapshot: DeliveryBackupSnapshot;
 }) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     delivery: {
       createdAt: snapshot.delivery.createdAt.toISOString(),
       createdByUserId: snapshot.delivery.createdByUserId,
@@ -310,11 +312,11 @@ export function buildDeliveryManifest({
     users: collectManifestUsers(snapshot),
     pieces: snapshot.pieces.map((piece) => ({
       createdAt: piece.createdAt.toISOString(),
+      currentReviewState: piece.currentReviewState,
       deliveryId: piece.deliveryId,
       id: piece.id,
       initialNote: piece.initialNote,
       position: piece.position,
-      reviewState: piece.reviewState,
       updatedAt: piece.updatedAt.toISOString(),
       versions: piece.versions.map((version) => ({
         checksum: version.checksum,
@@ -328,6 +330,7 @@ export function buildDeliveryManifest({
         mimeType: version.mimeType,
         originalFilename: version.originalFilename,
         relativePath: getPieceVersionAssetRelativePath({ piece, version }),
+        reviewState: version.reviewState,
         storageKey: version.storageKey,
         uploadedAt: version.uploadedAt.toISOString(),
         uploadedByUserId: version.uploadedByUserId,

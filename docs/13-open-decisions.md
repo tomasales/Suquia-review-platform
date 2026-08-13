@@ -8,7 +8,6 @@ Este documento concentra decisiones abiertas. No resolver estos puntos sin defin
 - Si más adelante se registra también el estado **Publicado**.
 - Política de archivado además de eliminación.
 - UI exacta de restauración desde Drive.
-- Cuando se sube una nueva versión de una pieza, ¿su evaluación actual se reinicia automáticamente a un estado neutro / Sin revisar?
 - Definir si Stories y Feed comparten exactamente el mismo criterio de aprobación/publicación o si existen diferencias operativas. Anteriormente se contempló que Feed no se publique hasta tener todo aprobado y que Stories podrían tolerar observaciones menores salvo que exista un cambio bloqueante, pero esto no está confirmado como regla final.
 
 ## Archivos y contenido

@@ -17,6 +17,7 @@ type PieceReviewModalProps = {
   hasNext: boolean;
   hasPrevious: boolean;
   isFeedbackSubmitting: boolean;
+  isLatestVersion: boolean;
   isReadOnly: boolean;
   isReviewSaving: boolean;
   onClose: () => void;
@@ -25,10 +26,18 @@ type PieceReviewModalProps = {
   onNext: () => void;
   onPrevious: () => void;
   onReviewStateChange: (reviewState: ReviewState) => void;
+  onVersionFileCancel: () => void;
+  onVersionFileSelect: (file: File | null) => void;
   onVersionSelect: (versionNumber: number) => void;
+  onVersionUpload: () => void;
   piece: Piece;
   reviewState: ReviewState;
   selectedVersion: PieceVersion;
+  versionUpload: {
+    error: string | null;
+    file: File | null;
+    isUploading: boolean;
+  };
 };
 
 export function PieceReviewModal({
@@ -36,6 +45,7 @@ export function PieceReviewModal({
   hasNext,
   hasPrevious,
   isFeedbackSubmitting,
+  isLatestVersion,
   isReadOnly,
   isReviewSaving,
   onClose,
@@ -44,10 +54,14 @@ export function PieceReviewModal({
   onNext,
   onPrevious,
   onReviewStateChange,
+  onVersionFileCancel,
+  onVersionFileSelect,
   onVersionSelect,
+  onVersionUpload,
   piece,
   reviewState,
   selectedVersion,
+  versionUpload,
 }: PieceReviewModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -134,7 +148,7 @@ export function PieceReviewModal({
               Pieza {piece.position} · V{selectedVersion.versionNumber}
             </p>
             <p className="text-xs text-muted-foreground">
-              {piece.reviewStateLabel}
+              {selectedVersion.reviewStateLabel}
             </p>
           </div>
           <button
@@ -192,16 +206,21 @@ export function PieceReviewModal({
             <PieceReviewPanel
               draft={draft}
               isFeedbackSubmitting={isFeedbackSubmitting}
+              isLatestVersion={isLatestVersion}
               isMobileLayout
               isReadOnly={isReadOnly}
               isReviewSaving={isReviewSaving}
               onDraftChange={onDraftChange}
               onFeedbackSubmit={onFeedbackSubmit}
               onReviewStateChange={onReviewStateChange}
+              onVersionFileCancel={onVersionFileCancel}
+              onVersionFileSelect={onVersionFileSelect}
               onVersionSelect={onVersionSelect}
+              onVersionUpload={onVersionUpload}
               piece={piece}
               reviewState={reviewState}
               selectedVersion={selectedVersion}
+              versionUpload={versionUpload}
             />
           </div>
         </div>
@@ -210,15 +229,20 @@ export function PieceReviewModal({
           <PieceReviewPanel
             draft={draft}
             isFeedbackSubmitting={isFeedbackSubmitting}
+            isLatestVersion={isLatestVersion}
             isReadOnly={isReadOnly}
             isReviewSaving={isReviewSaving}
             onDraftChange={onDraftChange}
             onFeedbackSubmit={onFeedbackSubmit}
             onReviewStateChange={onReviewStateChange}
+            onVersionFileCancel={onVersionFileCancel}
+            onVersionFileSelect={onVersionFileSelect}
             onVersionSelect={onVersionSelect}
+            onVersionUpload={onVersionUpload}
             piece={piece}
             reviewState={reviewState}
             selectedVersion={selectedVersion}
+            versionUpload={versionUpload}
           />
         </div>
 

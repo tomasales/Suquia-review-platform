@@ -5,7 +5,10 @@ import { Prisma, SyncOperationStatus } from "@prisma/client";
 import { DRIVE_BACKUP_OPERATION_TYPE } from "@/lib/drive/backup-format";
 import { resolveDriveBackupRefreshAction } from "@/lib/drive/enqueue-rules";
 
-export type DriveBackupRefreshReason = "feedback-added" | "piece-review";
+export type DriveBackupRefreshReason =
+  | "feedback-added"
+  | "piece-review"
+  | "piece-version-uploaded";
 
 export type DriveBackupRefreshResult =
   | {

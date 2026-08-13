@@ -55,6 +55,8 @@ Cada entrega debe tener un manifest estructurado que permita reconstruirla.
 
 No se debe depender de inferir información solamente mirando nombres de archivos.
 
+El manifest registra el estado actual de cada pieza como `currentReviewState`, derivado de la última `PieceVersion`, y conserva el `reviewState` propio de cada versión en su historial.
+
 ## Eliminación y backup
 
 Eliminar una entrega de la plataforma no debe borrar el backup en Google Drive.

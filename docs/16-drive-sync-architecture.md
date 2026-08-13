@@ -173,7 +173,7 @@ Schema conceptual:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "delivery": {
     "id": "immutable-delivery-id",
     "type": "STORIES",
@@ -197,11 +197,12 @@ Schema conceptual:
       "id": "...",
       "position": 1,
       "initialNote": "...",
-      "reviewState": "OK",
+      "currentReviewState": "OK",
       "versions": [
         {
           "id": "...",
           "versionNumber": 1,
+          "reviewState": "OK",
           "uploadedByUserId": "...",
           "uploadedAt": "...",
           "originalFilename": "...",
@@ -250,13 +251,12 @@ Schema conceptual:
 
 Dependencias abiertas:
 
-- estado de pieza al subir nueva versión;
 - convención final de nombres;
 - estado de entrega restaurada.
 
 ## Refresh incremental por revisión y feedback
 
-No existe un sync separado para review o feedback. Las mutaciones reales de `Piece.reviewState`, `Delivery.status` y `Feedback` crean o reutilizan una `SyncOperation` de tipo `DRIVE_BACKUP_DELIVERY`, porque el processor siempre vuelve a leer PostgreSQL y escribe un snapshot canónico actual.
+No existe un sync separado para review o feedback. Las mutaciones reales de `PieceVersion.reviewState`, `Delivery.status`, `Feedback` y subida de nueva versión crean o reutilizan una `SyncOperation` de tipo `DRIVE_BACKUP_DELIVERY`, porque el processor siempre vuelve a leer PostgreSQL y escribe un snapshot canónico actual.
 
 Reglas de coalescing:
 

@@ -9,6 +9,7 @@ import {
 import {
   assertDeliveryCanBeReviewed,
   buildFeedbackJournalMetadata,
+  buildDeliveryStatusJournalMetadata,
   getDeliveryStatusAfterFeedback,
   getDeliveryStatusAfterPieceReview,
   getFeedbackSourceType,
@@ -107,3 +108,16 @@ assert.deepEqual(feedbackMetadata, {
   sourceType: FeedbackSourceType.TOMI,
 });
 assert.equal("body" in feedbackMetadata, false);
+
+assert.deepEqual(
+  buildDeliveryStatusJournalMetadata({
+    nextStatus: DeliveryStatus.SENT_FOR_REVIEW,
+    previousStatus: DeliveryStatus.CHANGES_REQUESTED,
+    reason: "new-piece-version",
+  }),
+  {
+    nextStatus: DeliveryStatus.SENT_FOR_REVIEW,
+    previousStatus: DeliveryStatus.CHANGES_REQUESTED,
+    reason: "new-piece-version",
+  },
+);

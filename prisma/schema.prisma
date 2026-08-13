@@ -177,13 +177,12 @@ model Delivery {
 }
 
 model Piece {
-  id          String            @id @default(uuid())
+  id          String   @id @default(uuid())
   deliveryId  String
   position    Int
   initialNote String?
-  reviewState PieceReviewState?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   delivery           Delivery           @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
   versions           PieceVersion[]
@@ -191,12 +190,11 @@ model Piece {
   aiKnowledgeEntries AIKnowledgeEntry[]
 
   @@unique([deliveryId, position])
-  @@index([reviewState])
   @@index([deliveryId])
 }
 
 model PieceVersion {
-  id               String   @id @default(uuid())
+  id               String            @id @default(uuid())
   pieceId          String
   versionNumber    Int
   uploadedByUserId String
@@ -207,8 +205,9 @@ model PieceVersion {
   driveFileId      String?
   driveFolderId    String?
   checksum         String?
-  uploadedAt       DateTime @default(now())
-  createdAt        DateTime @default(now())
+  reviewState      PieceReviewState?
+  uploadedAt       DateTime          @default(now())
+  createdAt        DateTime          @default(now())
 
   piece              Piece              @relation(fields: [pieceId], references: [id], onDelete: Restrict)
   uploadedBy         User               @relation("PieceVersionUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
@@ -216,6 +215,7 @@ model PieceVersion {
   aiKnowledgeEntries AIKnowledgeEntry[]
 
   @@unique([pieceId, versionNumber])
+  @@index([reviewState])
   @@index([uploadedAt])
   @@index([uploadedByUserId])
   @@index([driveFileId])

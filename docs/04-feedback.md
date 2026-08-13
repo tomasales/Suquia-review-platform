@@ -23,6 +23,8 @@ El feedback por pieza debe soportar:
 - El feedback debe quedar vinculado a la versión en la que fue realizado.
 - En la primera implementación real, el feedback por pieza se persiste con `level = PIECE` y `pieceVersionId` obligatorio.
 - Cuando existe una nueva versión, los comentarios anteriores siguen accesibles.
+- El feedback nuevo solo puede agregarse sobre la última versión de una pieza.
+- Las versiones históricas son de solo lectura para feedback.
 - Feedback de Tomi y Feedback de Dirección deben mostrarse claramente separados.
 - Feedback de Dirección no debe alimentar la memoria de IA.
 - Feedback de Dirección no debe interpretarse automáticamente como una instrucción de diseño de Tomi.

@@ -110,11 +110,11 @@ const snapshot: DeliveryBackupSnapshot = {
   pieces: [
     {
       createdAt,
+      currentReviewState: "OK",
       deliveryId: "delivery-1",
       id: "piece-1",
       initialNote: "Ajustar copy",
       position: 1,
-      reviewState: "OK",
       updatedAt: createdAt,
       versions: [
         {
@@ -126,6 +126,7 @@ const snapshot: DeliveryBackupSnapshot = {
           id: "version-1",
           mimeType: "image/png",
           originalFilename: "story.png",
+          reviewState: "OK",
           storageKey: "deliveries/delivery-1/pieces/piece-1/v1/story.png",
           uploadedAt: createdAt,
           uploadedBy: user,
@@ -219,16 +220,19 @@ const metadata = buildPieceMetadata({
   driveIds,
   piece: snapshot.pieces[0],
 });
-assert.equal(metadata.schemaVersion, 1);
+assert.equal(metadata.schemaVersion, 2);
 assert.equal(metadata.versions[0].driveFileId, "drive-version-file");
 assert.equal(metadata.versions[0].fileSizeBytes, 2048);
-assert.equal(metadata.piece.reviewState, "OK");
+assert.equal(metadata.piece.currentReviewState, "OK");
+assert.equal(metadata.versions[0].reviewState, "OK");
 
 const manifest = buildDeliveryManifest({ driveIds, exportedAt, snapshot });
-assert.equal(manifest.schemaVersion, 1);
+assert.equal(manifest.schemaVersion, 2);
 assert.equal(manifest.delivery.driveManifestFileId, "drive-manifest");
 assert.equal(manifest.journal.driveFileId, "drive-journal");
 assert.equal(manifest.pieces[0].versions[0].driveFileId, "drive-version-file");
+assert.equal(manifest.pieces[0].currentReviewState, "OK");
+assert.equal(manifest.pieces[0].versions[0].reviewState, "OK");
 assert.equal(manifest.feedback.length, 2);
 assert.equal(manifest.feedback[0].id, "feedback-2");
 assert.equal(manifest.feedback[0].pieceVersionId, "version-1");
@@ -240,7 +244,7 @@ assert.deepEqual(
   ["user-1", "user-2"],
 );
 assert.equal(manifest.attachments.length, 0);
-assert.match(serializeJsonForDrive(manifest), /"schemaVersion": 1,/);
+assert.match(serializeJsonForDrive(manifest), /"schemaVersion": 2,/);
 
 assert.equal(
   serializeJournalJsonl(snapshot.journalEvents),

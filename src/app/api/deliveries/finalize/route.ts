@@ -112,12 +112,12 @@ export async function POST(request: Request) {
               id: piece.pieceId,
               initialNote: piece.note,
               position: piece.position,
-              reviewState: null,
               versions: {
                 create: {
                   fileSizeBytes: BigInt(piece.fileSizeBytes),
                   mimeType: piece.mimeType,
                   originalFilename: piece.originalFilename,
+                  reviewState: null,
                   storageKey: piece.storageKey,
                   uploadedAt: submittedAt,
                   uploadedByUserId: user.id,

@@ -151,7 +151,7 @@ export function buildDeliveryStatusJournalMetadata({
 }: {
   previousStatus: DeliveryStatus;
   nextStatus: DeliveryStatus;
-  reason: "feedback-added" | "piece-review";
+  reason: "feedback-added" | "new-piece-version" | "piece-review";
 }) {
   return {
     nextStatus,

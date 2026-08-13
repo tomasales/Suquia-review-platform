@@ -1,4 +1,4 @@
-import { Check, MessageSquare, Paperclip, RotateCcw } from "lucide-react";
+import { Check, MessageSquare, Paperclip, RotateCcw, Upload, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,33 +14,49 @@ type ReviewState = Piece["reviewState"];
 type PieceReviewPanelProps = {
   draft: string;
   isFeedbackSubmitting: boolean;
+  isLatestVersion: boolean;
   isMobileLayout?: boolean;
   isReadOnly: boolean;
   isReviewSaving: boolean;
   onDraftChange: (value: string) => void;
   onFeedbackSubmit: () => void;
   onReviewStateChange: (reviewState: ReviewState) => void;
+  onVersionFileCancel: () => void;
+  onVersionFileSelect: (file: File | null) => void;
   onVersionSelect: (versionNumber: number) => void;
+  onVersionUpload: () => void;
   piece: Piece;
   reviewState: ReviewState;
   selectedVersion: PieceVersion;
+  versionUpload: {
+    error: string | null;
+    file: File | null;
+    isUploading: boolean;
+  };
 };
 
 export function PieceReviewPanel({
   draft,
   isFeedbackSubmitting,
+  isLatestVersion,
   isReadOnly,
   isReviewSaving,
   isMobileLayout = false,
   onDraftChange,
   onFeedbackSubmit,
   onReviewStateChange,
+  onVersionFileCancel,
+  onVersionFileSelect,
   onVersionSelect,
+  onVersionUpload,
   piece,
   reviewState,
   selectedVersion,
+  versionUpload,
 }: PieceReviewPanelProps) {
   const state = getReviewStatePresentation(reviewState);
+  const nextVersionNumber = (piece.versions[0]?.versionNumber ?? 0) + 1;
+  const isInteractionDisabled = isReadOnly || !isLatestVersion;
 
   return (
     <aside
@@ -105,36 +121,47 @@ export function PieceReviewPanel({
       >
         <section className={isMobileLayout ? "hidden" : ""}>
           <p className="text-sm font-semibold text-foreground">Revisión</p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <Button
-              className={
-                reviewState === "OK"
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-50"
-                  : ""
-              }
-              disabled={isReadOnly || isReviewSaving}
-              onClick={() => onReviewStateChange("OK")}
-              size="sm"
-              variant="secondary"
-            >
-              <Check className="mr-1.5 size-4" strokeWidth={1.8} />
-              OK
-            </Button>
-            <Button
-              className={
-                reviewState === "NEEDS_CHANGES"
-                  ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-50"
-                  : ""
-              }
-              disabled={isReadOnly || isReviewSaving}
-              onClick={() => onReviewStateChange("NEEDS_CHANGES")}
-              size="sm"
-              variant="secondary"
-            >
-              <RotateCcw className="mr-1.5 size-4" strokeWidth={1.8} />
-              Necesita cambios
-            </Button>
-          </div>
+          {!isLatestVersion ? (
+            <div className="mt-3 rounded-[8px] border border-border bg-surface-muted/30 p-3">
+              <p className="text-sm font-medium text-foreground">
+                Versión anterior
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Esta versión forma parte del historial.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Button
+                className={
+                  reviewState === "OK"
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-50"
+                    : ""
+                }
+                disabled={isReadOnly || isReviewSaving}
+                onClick={() => onReviewStateChange("OK")}
+                size="sm"
+                variant="secondary"
+              >
+                <Check className="mr-1.5 size-4" strokeWidth={1.8} />
+                OK
+              </Button>
+              <Button
+                className={
+                  reviewState === "NEEDS_CHANGES"
+                    ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-50"
+                    : ""
+                }
+                disabled={isReadOnly || isReviewSaving}
+                onClick={() => onReviewStateChange("NEEDS_CHANGES")}
+                size="sm"
+                variant="secondary"
+              >
+                <RotateCcw className="mr-1.5 size-4" strokeWidth={1.8} />
+                Necesita cambios
+              </Button>
+            </div>
+          )}
           {isReadOnly ? (
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
               La entrega está cerrada.
@@ -180,9 +207,13 @@ export function PieceReviewPanel({
           <div className="mt-3">
             <textarea
               className="min-h-24 w-full resize-none rounded-[8px] border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-subtle-foreground focus:border-subtle-foreground"
-              disabled={isReadOnly || isFeedbackSubmitting}
+              disabled={isInteractionDisabled || isFeedbackSubmitting}
               onChange={(event) => onDraftChange(event.target.value)}
-              placeholder="Escribir devolución..."
+              placeholder={
+                isLatestVersion
+                  ? "Escribir devolución..."
+                  : "Esta versión es solo lectura."
+              }
               value={draft}
             />
             <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -196,7 +227,9 @@ export function PieceReviewPanel({
                 Adjuntar referencia
               </Button>
               <Button
-                disabled={isReadOnly || isFeedbackSubmitting || !draft.trim()}
+                disabled={
+                  isInteractionDisabled || isFeedbackSubmitting || !draft.trim()
+                }
                 onClick={onFeedbackSubmit}
                 size="sm"
                 variant="primary"
@@ -247,14 +280,86 @@ export function PieceReviewPanel({
                 type="button"
               >
                 <span>V{version.versionNumber}</span>
-                <span className="text-xs">
+                <span className="min-w-0 truncate text-right text-xs">
                   {version.versionNumber === piece.versions[0]?.versionNumber
-                    ? "Actual"
-                    : version.uploadedAtLabel}
+                    ? `Actual · ${version.reviewStateLabel}`
+                    : version.reviewStateLabel}
                 </span>
               </button>
             ))}
           </div>
+          {!isReadOnly ? (
+            <div className="mt-3 rounded-[8px] border border-border bg-surface-muted/25 p-3">
+              <input
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                id={`piece-version-upload-${piece.id}-${isMobileLayout ? "mobile" : "desktop"}`}
+                onChange={(event) => {
+                  onVersionFileSelect(event.currentTarget.files?.[0] ?? null);
+                  event.currentTarget.value = "";
+                }}
+                type="file"
+              />
+              {versionUpload.file ? (
+                <div className="space-y-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {versionUpload.file.name}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {formatFileSize(versionUpload.file.size)}
+                      </p>
+                    </div>
+                    <button
+                      aria-label="Cancelar subida"
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] border border-border text-muted-foreground"
+                      disabled={versionUpload.isUploading}
+                      onClick={onVersionFileCancel}
+                      type="button"
+                    >
+                      <X className="size-4" strokeWidth={1.8} />
+                    </button>
+                  </div>
+                  {versionUpload.error ? (
+                    <p className="text-xs leading-5 text-amber-800">
+                      {versionUpload.error}
+                    </p>
+                  ) : null}
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      disabled={versionUpload.isUploading}
+                      onClick={onVersionFileCancel}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      disabled={
+                        versionUpload.isUploading || Boolean(versionUpload.error)
+                      }
+                      onClick={onVersionUpload}
+                      size="sm"
+                      variant="primary"
+                    >
+                      {versionUpload.isUploading
+                        ? "Subiendo..."
+                        : `Subir V${nextVersionNumber}`}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <label
+                  className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-[8px] border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted"
+                  htmlFor={`piece-version-upload-${piece.id}-${isMobileLayout ? "mobile" : "desktop"}`}
+                >
+                  <Upload className="mr-1.5 size-4" strokeWidth={1.8} />
+                  Subir nueva versión
+                </label>
+              )}
+            </div>
+          ) : null}
         </section>
 
         <section>
@@ -295,6 +400,11 @@ export function PieceReviewPanel({
 
       {isMobileLayout ? (
         <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-surface/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+          {!isLatestVersion ? (
+            <div className="mx-auto flex min-h-11 max-w-md items-center justify-center rounded-[8px] border border-border bg-surface-muted/40 px-3 text-sm font-medium text-muted-foreground">
+              Versión anterior · solo lectura
+            </div>
+          ) : (
           <div className="mx-auto grid max-w-md grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
             <Button
               className={
@@ -325,8 +435,17 @@ export function PieceReviewPanel({
               Necesita cambios
             </Button>
           </div>
+          )}
         </div>
       ) : null}
     </aside>
   );
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }

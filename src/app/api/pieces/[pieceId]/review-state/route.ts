@@ -24,6 +24,7 @@ export async function PATCH(
     const input = await request.json();
     const result = await updatePieceReviewState({
       pieceId,
+      pieceVersionId: input.pieceVersionId,
       reviewState: input.reviewState,
       userId: user.id,
     });

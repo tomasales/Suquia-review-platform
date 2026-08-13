@@ -123,6 +123,7 @@ const receiptPieces = getReceiptFinalizePieces({
   deliveryId: "delivery-1",
   expiresAt: 1,
   issuedAt: 0,
+  kind: "delivery-creation",
   pieces: [
     {
       fileSizeBytes: 2048,

@@ -68,27 +68,29 @@ Estos estados no son una máquina rígida. Se puede volver atrás y cada cambio 
 
 - **Propósito**: pieza ordenada dentro de una entrega.
 - **ID**: inmutable; también se guarda en manifest.
-- **Campos principales**: deliveryId, position, initialNote, reviewState nullable, latestVersionId.
+- **Campos principales**: deliveryId, position, initialNote.
 - **Relaciones**: delivery, versions, feedback, journal events.
 - **Timestamps**: `createdAt`, `updatedAt`.
-- **Índices relevantes**: `(deliveryId, position)` único, reviewState.
+- **Índices relevantes**: `(deliveryId, position)` único.
 - **Canónico**: DB.
 - **Reconstruible desde Drive**: sí, desde manifest.
 
 Después del primer envío de la entrega, `position` no debe cambiar y no se agregan ni eliminan piezas. Solo se agregan versiones.
 
-`reviewState` debe admitir al menos `OK`, `NEEDS_CHANGES` y valor nulo/sin evaluar. No resolver todavía si una nueva versión reinicia automáticamente ese estado.
+El estado actual de una pieza se deriva de la última `PieceVersion` por `versionNumber DESC`.
 
 ## PieceVersion
 
 - **Propósito**: versión no destructiva de una pieza.
 - **ID**: inmutable.
-- **Campos principales**: pieceId, versionNumber, uploadedByUserId, originalFilename, mimeType, fileSizeBytes, storageKey, driveFileId, driveFolderId, checksum opcional, uploadedAt.
+- **Campos principales**: pieceId, versionNumber, uploadedByUserId, originalFilename, mimeType, fileSizeBytes, storageKey, driveFileId, driveFolderId, checksum opcional, reviewState nullable, uploadedAt.
 - **Relaciones**: piece, feedback, attachments, journal events.
 - **Timestamps**: `createdAt`.
-- **Índices relevantes**: `(pieceId, versionNumber)` único, uploadedAt.
+- **Índices relevantes**: `(pieceId, versionNumber)` único, reviewState, uploadedAt.
 - **Canónico**: DB para metadata; archivo operativo según almacenamiento elegido; backup en Drive.
 - **Reconstruible desde Drive**: metadata y archivo sí, si manifest y archivos existen.
+
+`reviewState` admite `OK`, `NEEDS_CHANGES` y valor nulo/sin evaluar. Cada nueva versión nace con `reviewState = null`. Las versiones anteriores conservan su estado histórico, pero no aceptan nuevas acciones de revisión ni feedback.
 
 ## Feedback
 
@@ -223,7 +225,6 @@ Usarla solo para valores como carpeta raíz Drive, flags de health check o confi
 
 ## Pendientes de producto que afectan el modelo
 
-- Qué ocurre con `reviewState` cuando se sube una nueva versión.
 - Formatos y tamaños máximos de archivos.
 - Estado de una entrega restaurada desde Drive.
 - Si Journal entra en búsqueda global.

@@ -115,7 +115,6 @@ function visualPiece(
     id: `visual-${deliveryKey}-piece-${position}`,
     position,
     initialNote,
-    reviewState,
     versions: [
       {
         id: `visual-${deliveryKey}-piece-${position}-version-${versionNumber}`,
@@ -123,6 +122,7 @@ function visualPiece(
         mimeType: "image/jpeg",
         versionNumber,
         originalFilename: `pieza-${position}.jpg`,
+        reviewState,
         storageKey: null,
         uploadedAt: new Date("2026-08-13T09:00:00"),
         uploadedBy: visualReviewAuthors[1],
@@ -161,6 +161,9 @@ export type VisualReviewVersionData = {
   imageSrc: string;
   mimeType?: string;
   originalFilename?: string;
+  reviewState?: PieceReviewState | null;
+  reviewStateLabel?: string;
+  reviewStateTone?: "neutral" | "success" | "warning";
   uploaderLabel?: string;
   feedback: VisualReviewFeedbackItem[];
   references: VisualReviewReference[];

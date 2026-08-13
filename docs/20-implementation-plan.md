@@ -54,7 +54,7 @@
 - **Dependencias**: deliveries.
 - **Construir**: Piece, PieceVersion, orden antes de envío, congelamiento después del primer envío.
 - **Aceptación**: no se puede agregar/eliminar/reordenar después de enviar; sí crear nuevas versiones.
-- **No construir todavía**: decidir reinicio automático de reviewState.
+- **Decisión cerrada**: el estado de revisión vive en `PieceVersion`; cada nueva versión nace sin revisar.
 
 ## 6. Upload
 
