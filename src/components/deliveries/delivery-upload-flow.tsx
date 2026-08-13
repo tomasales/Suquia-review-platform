@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   type ChangeEvent,
   type DragEvent,
@@ -27,6 +27,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
+import { useToast } from "@/components/ui/toast";
 
 type DeliveryType = "STORIES" | "FEED";
 
@@ -34,7 +35,8 @@ type UploadPiece = {
   file: File;
   id: string;
   note: string;
-  noteOpen: boolean;
+  noteDraft: string;
+  noteEditing: boolean;
   previewError: boolean;
   previewUrl: string;
 };
@@ -96,7 +98,8 @@ function createPiece(file: File): UploadPiece {
     file,
     id: `${file.name}-${file.size}-${file.lastModified}-${randomId}`,
     note: "",
-    noteOpen: false,
+    noteDraft: "",
+    noteEditing: false,
     previewError: false,
     previewUrl: URL.createObjectURL(file),
   };
@@ -113,6 +116,8 @@ function isSupportedFile(file: File) {
 export function DeliveryUploadFlow({
   visualReviewMode,
 }: DeliveryUploadFlowProps) {
+  const router = useRouter();
+  const { showToast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const draggedPieceId = useRef<string | null>(null);
   const piecesRef = useRef<UploadPiece[]>([]);
@@ -120,10 +125,10 @@ export function DeliveryUploadFlow({
   const [dragOverDropzone, setDragOverDropzone] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [generalNote, setGeneralNote] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [pieces, setPieces] = useState<UploadPiece[]>([]);
   const [pendingTypeChange, setPendingTypeChange] =
     useState<PendingTypeChange>(null);
-  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     piecesRef.current = pieces;
@@ -182,7 +187,6 @@ export function DeliveryUploadFlow({
       ...currentPieces,
       ...supportedFiles.map(createPiece),
     ]);
-    setSubmitted(false);
   }
 
   function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
@@ -204,7 +208,6 @@ export function DeliveryUploadFlow({
     }
 
     setDeliveryType(nextType);
-    setSubmitted(false);
   }
 
   function confirmTypeChange() {
@@ -218,7 +221,6 @@ export function DeliveryUploadFlow({
     setGeneralNote("");
     setDeliveryType(pendingTypeChange.nextType);
     setPendingTypeChange(null);
-    setSubmitted(false);
   }
 
   function removePiece(pieceId: string) {
@@ -231,7 +233,6 @@ export function DeliveryUploadFlow({
 
       return currentPieces.filter((piece) => piece.id !== pieceId);
     });
-    setSubmitted(false);
   }
 
   function movePiece(pieceId: string, direction: -1 | 1) {
@@ -253,22 +254,47 @@ export function DeliveryUploadFlow({
 
       return nextPieces;
     });
-    setSubmitted(false);
   }
 
-  function updatePieceNote(pieceId: string, note: string) {
+  function updatePieceNoteDraft(pieceId: string, noteDraft: string) {
     setPieces((currentPieces) =>
       currentPieces.map((piece) =>
-        piece.id === pieceId ? { ...piece, note } : piece,
+        piece.id === pieceId ? { ...piece, noteDraft } : piece,
       ),
     );
-    setSubmitted(false);
   }
 
-  function togglePieceNote(pieceId: string) {
+  function startEditingPieceNote(pieceId: string) {
     setPieces((currentPieces) =>
       currentPieces.map((piece) =>
-        piece.id === pieceId ? { ...piece, noteOpen: true } : piece,
+        piece.id === pieceId
+          ? { ...piece, noteDraft: piece.note, noteEditing: true }
+          : piece,
+      ),
+    );
+  }
+
+  function cancelPieceNote(pieceId: string) {
+    setPieces((currentPieces) =>
+      currentPieces.map((piece) =>
+        piece.id === pieceId
+          ? { ...piece, noteDraft: piece.note, noteEditing: false }
+          : piece,
+      ),
+    );
+  }
+
+  function savePieceNote(pieceId: string) {
+    setPieces((currentPieces) =>
+      currentPieces.map((piece) =>
+        piece.id === pieceId
+          ? {
+              ...piece,
+              note: piece.noteDraft.trim(),
+              noteDraft: piece.noteDraft.trim(),
+              noteEditing: false,
+            }
+          : piece,
       ),
     );
   }
@@ -332,15 +358,41 @@ export function DeliveryUploadFlow({
 
       return nextPieces;
     });
-    setSubmitted(false);
   }
 
-  function handleSubmit() {
-    if (!canSubmit || !visualReviewMode) {
+  async function handleSubmit() {
+    if (!canSubmit || !visualReviewMode || isSubmitting) {
       return;
     }
 
-    setSubmitted(true);
+    setIsSubmitting(true);
+
+    await new Promise((resolve) => window.setTimeout(resolve, 650));
+
+    const shouldSimulateError =
+      process.env.NODE_ENV === "development" &&
+      new URLSearchParams(window.location.search).get("simulateCreateError") ===
+        "1";
+
+    if (shouldSimulateError) {
+      setIsSubmitting(false);
+      showToast({
+        title: "No pudimos crear la entrega",
+        description: "Tus cambios siguen acá. Intentá nuevamente.",
+        tone: "error",
+      });
+      return;
+    }
+
+    const targetDeliveryId =
+      deliveryType === "FEED" ? "visual-feed-review" : "visual-stories-sent";
+
+    // Future real flow:
+    // const createdDelivery = await createDelivery(...)
+    // router.push(`/deliveries/${createdDelivery.id}`)
+    router.push(
+      `/deliveries/${targetDeliveryId}?created=1&pieces=${pieces.length}`,
+    );
   }
 
   return (
@@ -484,8 +536,10 @@ export function DeliveryUploadFlow({
                       onMove={movePiece}
                       onPreviewError={markPreviewError}
                       onRemove={removePiece}
-                      onToggleNote={togglePieceNote}
-                      onUpdateNote={updatePieceNote}
+                      onCancelNote={cancelPieceNote}
+                      onSaveNote={savePieceNote}
+                      onStartEditingNote={startEditingPieceNote}
+                      onUpdateNoteDraft={updatePieceNoteDraft}
                       piece={piece}
                     />
                   ))}
@@ -517,7 +571,6 @@ export function DeliveryUploadFlow({
               id="general-note"
               onChange={(event) => {
                 setGeneralNote(event.target.value);
-                setSubmitted(false);
               }}
               placeholder="Contexto general de la entrega..."
               value={generalNote}
@@ -547,38 +600,11 @@ export function DeliveryUploadFlow({
 
               <Button
                 className="min-h-11 w-full"
-                disabled={!canSubmit || !visualReviewMode}
+                disabled={!canSubmit || !visualReviewMode || isSubmitting}
                 onClick={handleSubmit}
               >
-                Entregar
+                {isSubmitting ? "Entregando..." : "Entregar"}
               </Button>
-
-              {submitted ? (
-                <div className="space-y-3 rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
-                  <div>
-                    <p className="font-semibold">Entrega preparada</p>
-                    <p className="mt-1 text-xs leading-5">{summary}</p>
-                    <p className="mt-1 text-xs leading-5">
-                      Vista previa: la entrega todavía no se guardó.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Link
-                      className="inline-flex h-8 items-center justify-center rounded-[8px] border border-emerald-300 bg-white px-3 text-xs font-medium text-emerald-950"
-                      href="/deliveries"
-                    >
-                      Volver a entregas
-                    </Link>
-                    <Button
-                      onClick={() => setSubmitted(false)}
-                      size="sm"
-                      variant="secondary"
-                    >
-                      Seguir editando
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
             </div>
           </Surface>
         </aside>
@@ -633,10 +659,12 @@ type UploadPieceCardProps = {
   onDragStart: (pieceId: string) => void;
   onDrop: (pieceId: string) => void;
   onMove: (pieceId: string, direction: -1 | 1) => void;
+  onCancelNote: (pieceId: string) => void;
   onPreviewError: (pieceId: string) => void;
   onRemove: (pieceId: string) => void;
-  onToggleNote: (pieceId: string) => void;
-  onUpdateNote: (pieceId: string, note: string) => void;
+  onSaveNote: (pieceId: string) => void;
+  onStartEditingNote: (pieceId: string) => void;
+  onUpdateNoteDraft: (pieceId: string, noteDraft: string) => void;
   piece: UploadPiece;
 };
 
@@ -648,14 +676,16 @@ function UploadPieceCard({
   onDragStart,
   onDrop,
   onMove,
+  onCancelNote,
   onPreviewError,
   onRemove,
-  onToggleNote,
-  onUpdateNote,
+  onSaveNote,
+  onStartEditingNote,
+  onUpdateNoteDraft,
   piece,
 }: UploadPieceCardProps) {
   const position = String(index + 1).padStart(2, "0");
-  const showNote = piece.noteOpen || piece.note.trim().length > 0;
+  const hasSavedNote = piece.note.trim().length > 0;
 
   return (
     <article
@@ -743,8 +773,8 @@ function UploadPieceCard({
       </div>
 
       <div className="mt-3">
-        {showNote ? (
-          <>
+        {piece.noteEditing ? (
+          <div>
             <label
               className="mb-1 block text-xs font-medium text-muted-foreground"
               htmlFor={`piece-note-${piece.id}`}
@@ -754,15 +784,51 @@ function UploadPieceCard({
             <textarea
               className="min-h-20 w-full resize-y rounded-[8px] border border-border bg-surface px-3 py-2 text-sm leading-5 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-foreground"
               id={`piece-note-${piece.id}`}
-              onChange={(event) => onUpdateNote(piece.id, event.target.value)}
+              onChange={(event) =>
+                onUpdateNoteDraft(piece.id, event.target.value)
+              }
               placeholder="Nota para esta pieza..."
-              value={piece.note}
+              value={piece.noteDraft}
             />
-          </>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Button
+                className="min-h-10"
+                onClick={() => onCancelNote(piece.id)}
+                size="sm"
+                variant="secondary"
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="min-h-10"
+                onClick={() => onSaveNote(piece.id)}
+                size="sm"
+              >
+                Guardar nota
+              </Button>
+            </div>
+          </div>
+        ) : hasSavedNote ? (
+          <div className="rounded-[8px] border border-border bg-surface px-3 py-2">
+            <p className="text-xs font-medium text-muted-foreground">
+              Nota para esta pieza
+            </p>
+            <p className="mt-1 max-h-[3.75rem] overflow-hidden text-sm leading-5 text-foreground">
+              {piece.note}
+            </p>
+            <button
+              className="mt-2 inline-flex min-h-9 items-center gap-2 rounded-[8px] text-sm font-medium text-muted-foreground hover:text-foreground"
+              onClick={() => onStartEditingNote(piece.id)}
+              type="button"
+            >
+              <StickyNote className="size-4" strokeWidth={1.8} />
+              Editar nota
+            </button>
+          </div>
         ) : (
           <button
             className="inline-flex min-h-10 items-center gap-2 rounded-[8px] px-2 text-sm font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground"
-            onClick={() => onToggleNote(piece.id)}
+            onClick={() => onStartEditingNote(piece.id)}
             type="button"
           >
             <StickyNote className="size-4" strokeWidth={1.8} />

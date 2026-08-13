@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { DeliveryCreatedToast } from "@/components/deliveries/delivery-created-toast";
 import { PieceReviewExperience } from "@/components/deliveries/piece-review-experience";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -29,6 +30,10 @@ export default async function DeliveryDetailPage({
 
   return (
     <AppShell user={user}>
+      <Suspense fallback={null}>
+        <DeliveryCreatedToast />
+      </Suspense>
+
       <PageHeader
         title={delivery.title}
         description={`${delivery.typeLabel} · ${delivery.dateLabel} · ${delivery.authorLabel}`}
