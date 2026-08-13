@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 
+import { SignOutButton } from "@/components/auth/sign-out-button";
 import { SignInButton } from "@/components/auth/sign-in-button";
 import { Surface } from "@/components/ui/surface";
-import { getCurrentSession } from "@/lib/session";
+import { getAuthorizedUser } from "@/lib/session";
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -11,14 +12,15 @@ type LoginPageProps = {
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const session = await getCurrentSession();
+  const authorization = await getAuthorizedUser();
 
-  if (session?.user) {
+  if (authorization.status === "authorized") {
     redirect("/");
   }
 
   const { error } = await searchParams;
-  const isAccessDenied = error === "AccessDenied";
+  const isAccessDenied =
+    error === "AccessDenied" || authorization.status === "unauthorized";
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-8 text-foreground">
@@ -48,7 +50,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               </div>
             ) : null}
 
-            <SignInButton />
+            {authorization.status === "unauthorized" ? (
+              <SignOutButton />
+            ) : (
+              <SignInButton />
+            )}
 
             <p className="text-xs text-subtle-foreground">
               Esta plataforma es de uso interno.
