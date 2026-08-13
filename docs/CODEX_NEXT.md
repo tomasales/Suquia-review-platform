@@ -17,9 +17,14 @@ Este archivo es la única instrucción operativa que Codex debe ejecutar cuando 
 
 ---
 
-# Tarea actual — Hardening de mutations con PieceVersion
+# Tarea actual — Hardening de Delivery status y errores concurrentes
 
-Quiero hacer un hardening del nuevo flujo de `PieceVersion` antes de agregar más funcionalidades.
+El hardening anterior de `PieceVersion` resolvió correctamente la carrera entre review/feedback y una nueva versión usando row lock sobre `Piece`.
+
+Antes de agregar nuevas funcionalidades quiero cerrar dos problemas restantes:
+
+1. carrera de `Delivery.status` entre mutaciones simultáneas de PIEZAS DISTINTAS pertenecientes a la misma Delivery;
+2. errores `409` ambiguos en frontend, que hoy se interpretan siempre como “Hay una versión más nueva”.
 
 ## No hacer
 
@@ -27,87 +32,98 @@ Quiero hacer un hardening del nuevo flujo de `PieceVersion` antes de agregar má
 - NO implementar attachments.
 - NO implementar conversation.
 - NO implementar AI.
-- NO cambiar UX general.
-- NO modificar Prisma schema salvo bloqueo absolutamente necesario.
+- NO cambiar el diseño general.
+- NO cambiar reglas funcionales de review.
+- NO modificar Prisma schema salvo bloqueo real demostrado.
+- NO cambiar arquitectura Drive.
 
-## Problemas a resolver
+## Revisar especialmente
 
-1. Race entre nueva `PieceVersion` y review/feedback.
-2. Reconciliación de versiones optimistas después de `router.refresh()`.
-3. Retry correcto de `finalize` sin volver a subir R2.
-
-Revisar especialmente:
-
+- `src/lib/piece-mutation-lock.ts`
 - `src/lib/piece-review-actions.ts`
+- `src/lib/piece-review-rules.ts`
 - `src/app/api/pieces/[pieceId]/review-state/route.ts`
 - `src/app/api/pieces/[pieceId]/feedback/route.ts`
-- `src/app/api/pieces/[pieceId]/versions/prepare/route.ts`
 - `src/app/api/pieces/[pieceId]/versions/finalize/route.ts`
-- `src/app/api/pieces/[pieceId]/versions/cleanup-upload/route.ts`
 - `src/components/deliveries/piece-review-experience.tsx`
-- `src/lib/delivery-upload-receipt.ts`
-- tests actuales de PieceVersion/review
+- tests existentes de review/version upload
 
-## 1. Regla de consistencia
+También releer docs relacionados con estados, Journal y concurrencia.
 
-Solo la `PieceVersion` MÁS RECIENTE puede recibir:
+---
 
-- cambio `OK / Necesita cambios`;
-- feedback nuevo.
+## 1. Problema de concurrencia de Delivery.status
 
-Esta regla debe sostenerse incluso con requests concurrentes.
+Hoy existe lock por `Piece`.
 
-No alcanza con:
+Eso serializa correctamente mutations de una misma Piece, pero NO mutations simultáneas sobre Piece A y Piece B de la misma Delivery.
+
+Ejemplo peligroso:
 
 ```text
-query latest
-→ después abrir transaction
-→ mutation
+Delivery = SENT_FOR_REVIEW
+
+Request A sobre Piece 1:
+NEEDS_CHANGES
+→ debería dejar Delivery CHANGES_REQUESTED
+
+Request B sobre Piece 2:
+OK
+→ podría calcular IN_REVIEW
 ```
 
-La comprobación y la mutation deben quedar serializadas con la creación de nuevas versiones.
+Si ambos leen el mismo estado inicial y escriben la fila Delivery sin serialización, el último commit podría ganar y dejar:
 
-## 2. Lock por Piece
+`IN_REVIEW`
 
-Crear un helper server-only simple, por ejemplo:
+aunque ya hubo una Piece marcada `NEEDS_CHANGES`.
+
+Esto no es aceptable.
+
+---
+
+## 2. Lock de Delivery
+
+Crear helper server-only, por ejemplo:
 
 ```ts
-lockPieceForMutation(tx, pieceId)
+lockDeliveryForMutation(tx, deliveryId)
 ```
 
-Usar PostgreSQL row locking sobre `Piece`:
+usando PostgreSQL row lock:
 
 ```sql
 SELECT id
-FROM "Piece"
+FROM "Delivery"
 WHERE id = ...
 FOR UPDATE
 ```
 
-Usar Prisma `$queryRaw` de forma parametrizada y segura.
+Usar `$queryRaw` parametrizado.
 
-No concatenar SQL con IDs.
+NO concatenar IDs en SQL.
 
-`Piece` es la unidad de lock porque review, feedback y creación de versión pertenecen a la misma Piece.
+Puede vivir en:
 
-No introducir Redis ni distributed locks.
+`src/lib/delivery-mutation-lock.ts`
 
-## 3. Todas las mutations relevantes usan el mismo lock
+o junto al helper existente si queda más limpio.
 
-Deben adquirir el lock de `Piece`:
+---
 
-A. `updatePieceReviewState`
+## 3. Orden de locks
 
-B. `addPieceFeedback`
+MUY IMPORTANTE para evitar deadlocks.
 
-C. finalize de nueva `PieceVersion`
+Toda mutation que pueda tocar Piece + Delivery debe adquirir locks en el MISMO orden.
 
-Orden consistente:
+Usar esta convención:
 
 ```text
 transaction
+→ lock Delivery
 → lock Piece
-→ leer estado canónico actual
+→ leer estado canónico
 → validar
 → mutation
 → Journal
@@ -115,480 +131,494 @@ transaction
 → commit
 ```
 
-## 4. Review state dentro de transaction
+No alternar Piece→Delivery en un flujo y Delivery→Piece en otro.
 
-Refactorizar `updatePieceReviewState`.
+Actualizar todos los flujos relevantes para respetar el mismo orden.
 
-Mover la lectura relevante dentro de la transaction.
+---
 
-Dentro:
+## 4. updatePieceReviewState
 
-1. lock Piece;
-2. cargar Piece + Delivery + latest PieceVersion;
-3. validar `deletedAt`;
-4. validar `CLOSED`;
-5. comprobar `latestVersion.id === pieceVersionId` recibido;
-6. comprobar no-op;
-7. calcular Delivery status;
-8. actualizar `PieceVersion.reviewState`;
+Dentro de la misma transaction:
+
+1. obtener/confirmar `deliveryId` necesario para lockear sin confiar en input del browser;
+2. lock Delivery;
+3. lock Piece;
+4. releer Piece + Delivery + latest PieceVersion DESPUÉS de los locks;
+5. validar `deletedAt` / CLOSED / latest version;
+6. calcular siguiente estado con Delivery.status canónico;
+7. actualizar PieceVersion.reviewState;
+8. actualizar Delivery.status si corresponde;
 9. Journal;
-10. Delivery status si corresponde;
-11. enqueue Drive.
+10. enqueue Drive.
 
-Si mientras el request esperaba el lock apareció V2, la lectura posterior al lock verá V2.
+No usar para el cálculo un `Delivery.status` leído antes del lock.
 
-Si el request pretendía modificar V1, responder 409:
+---
 
-`Esta versión ya forma parte del historial.`
+## 5. addPieceFeedback
 
-NO modificar V1.
-
-## 5. Feedback dentro de transaction
-
-Mismo criterio para `addPieceFeedback`.
-
-Dentro:
-
-1. lock Piece;
-2. cargar Piece canónica;
-3. obtener latest version;
-4. validar `pieceVersionId`;
-5. si ya es histórica → 409;
-6. crear Feedback;
-7. Journal;
-8. Delivery status;
-9. Drive enqueue.
-
-No validar latest afuera y confiar en esa lectura durante la transaction.
-
-## 6. Finalize PieceVersion
-
-Mantener fuera de transaction únicamente lo externo:
-
-- verificar receipt;
-- validar usuario/kind;
-- validar storageKey;
-- HEAD R2.
-
-Después:
+Misma estrategia:
 
 ```text
-DB transaction
+transaction
+→ lock Delivery
 → lock Piece
-→ volver a leer Delivery + latest PieceVersion
-→ validar previousLatestVersionId
-→ crear nueva PieceVersion
+→ releer estado
+→ validar latest PieceVersion
+→ feedback
 → status
 → Journal
-→ enqueue
+→ Drive enqueue
 ```
 
-Esto hace que review/feedback y V2 compitan por el mismo lock.
+Si dos Pieces distintas reciben feedback/review al mismo tiempo, la segunda mutation debe ver el Delivery.status resultante de la primera.
 
-## 7. Semántica de carrera esperada
+---
+
+## 6. finalize nueva PieceVersion
+
+También modifica Delivery.status → `SENT_FOR_REVIEW`.
+
+Debe usar el MISMO orden de locks:
+
+```text
+transaction
+→ lock Delivery
+→ lock Piece
+→ releer Delivery + latest PieceVersion
+→ validar receipt contra latest
+→ crear PieceVersion
+→ actualizar Delivery.status
+→ Journal
+→ Drive enqueue
+```
+
+Lo externo sigue fuera de transaction:
+
+- receipt verification;
+- user verification;
+- storageKey validation;
+- R2 HEAD.
+
+---
+
+## 7. Cómo obtener deliveryId antes del lock
+
+No confiar en `deliveryId` enviado por browser.
+
+Para review/feedback, se puede hacer una lectura mínima de Piece para obtener `deliveryId`, y luego dentro de transaction:
+
+1. lock Delivery por ese id;
+2. lock Piece;
+3. releer Piece y confirmar que sigue perteneciendo a esa Delivery.
+
+La lectura inicial sirve SOLO para localizar el lock.
+
+La validación canónica sucede después de lockear.
+
+Para finalize PieceVersion, `deliveryId` viene firmado en receipt, pero igualmente releer y validar pertenencia dentro de transaction.
+
+---
+
+## 8. Regla de negocio existente
+
+NO cambiar estas reglas:
+
+- `SENT_FOR_REVIEW + OK` → `IN_REVIEW`.
+- `SENT_FOR_REVIEW + NEEDS_CHANGES` → `CHANGES_REQUESTED`.
+- `IN_REVIEW + NEEDS_CHANGES` → `CHANGES_REQUESTED`.
+- `CHANGES_REQUESTED + OK` → sigue `CHANGES_REQUESTED`.
+- todas las Pieces OK NO aprueban automáticamente la Delivery.
+- nueva PieceVersion → `SENT_FOR_REVIEW` si Delivery está abierta.
+- CLOSED sigue read-only.
+
+El objetivo es hacer estas reglas consistentes bajo concurrencia, no rediseñarlas.
+
+---
+
+## 9. Caso crítico esperado
 
 Estado inicial:
 
-`V1 = latest`.
+`Delivery = SENT_FOR_REVIEW`
 
-### Si review gana el lock primero
+Dos requests simultáneos en Pieces distintas:
 
-```text
-A actualiza V1 OK
-→ commit
-→ B crea V2 Sin revisar
-```
+A:
+`Piece 1 → NEEDS_CHANGES`
 
-Resultado válido:
+B:
+`Piece 2 → OK`
 
-- V1 = OK
-- V2 = Sin revisar
-
-### Si V2 gana el lock primero
+Si A obtiene Delivery lock primero:
 
 ```text
-B crea V2
-→ commit
-→ A obtiene lock
-→ descubre que V1 es histórica
-→ 409
+A → CHANGES_REQUESTED
+B espera
+B relee CHANGES_REQUESTED
+B marca Piece 2 OK
+B mantiene CHANGES_REQUESTED
 ```
 
-Nunca modificar retrospectivamente V1 una vez que V2 ya existe.
+Resultado final obligatorio:
 
-## 8. Feedback tiene la misma semántica
+`CHANGES_REQUESTED`
 
-Si feedback sobre V1 gana antes que V2, queda históricamente ligado a V1.
+Nunca `IN_REVIEW`.
 
-Si V2 gana primero, feedback sobre V1 se rechaza.
+---
 
-## 9. Delivery status consistency
+## 10. Otra carrera: nueva versión vs review de otra Piece
 
-El cálculo de `Delivery.status` debe usar el estado leído DESPUÉS de adquirir el lock.
+Ejemplo:
 
-Nueva versión:
+Delivery = CHANGES_REQUESTED
 
-`→ SENT_FOR_REVIEW`
+A:
+subir V2 en Piece 1
+→ quiere SENT_FOR_REVIEW
 
-Review / feedback:
+B:
+review Piece 2
 
-mantener reglas actuales.
+Ambos deben serializar modificación de Delivery.status usando el mismo Delivery lock.
 
-No crear FSM nueva.
+El segundo request debe calcular sobre el estado dejado por el primero.
 
-## 10. Constraint DB
+No definir reglas nuevas: aplicar las existentes con estado canónico actualizado.
 
-Mantener:
+---
 
-```prisma
-@@unique([pieceId, versionNumber])
-```
+# Parte 2 — Errores API estructurados
 
-El lock resuelve consistencia de negocio.
+## 11. Problema actual
 
-La constraint sigue como integridad DB.
+Frontend trata cualquier HTTP 409 de review/feedback como:
 
-## 11. Versiones locales duplicadas
+`Hay una versión más nueva`.
 
-Actualmente el frontend combina:
+Pero 409 también puede significar:
+
+- `DELIVERY_CLOSED`;
+- `HISTORICAL_VERSION`;
+- potencialmente otros conflictos futuros.
+
+No inferir semántica únicamente desde status HTTP.
+
+---
+
+## 12. Error codes
+
+Agregar códigos públicos estructurados para las mutations de review/feedback/version cuando corresponda.
+
+Ejemplos mínimos:
 
 ```text
-localVersions[piece.id]
-+
-piece.versions
+HISTORICAL_VERSION
+DELIVERY_CLOSED
+PIECE_NOT_FOUND
+INVALID_REVIEW_STATE
+VERSION_CONFLICT
 ```
 
-Después de success:
+No hace falta crear una taxonomía gigante.
 
-- agrega V2 local;
-- `router.refresh()`;
-- V2 llega desde PostgreSQL;
-- el state local puede seguir vivo.
+Solo tipar los casos que la UI necesita distinguir.
 
-Crear helper explícito:
+---
+
+## 13. Response API
+
+Formato consistente para error:
+
+```json
+{
+  "error": "Esta versión ya forma parte del historial.",
+  "code": "HISTORICAL_VERSION"
+}
+```
+
+Mantener status HTTP apropiado.
+
+El `message` sigue siendo copy público.
+
+`code` es estable para lógica cliente.
+
+No exponer stack ni detalles internos.
+
+---
+
+## 14. PieceReviewValidationError
+
+Extender el error para soportar `code`.
+
+Ejemplo conceptual:
 
 ```ts
-mergePieceVersions(persisted, optimistic)
+new PieceReviewValidationError(
+  "Esta versión ya forma parte del historial.",
+  409,
+  "HISTORICAL_VERSION",
+)
 ```
 
-o equivalente.
+Elegir firma limpia.
 
-Deduplicar primero por `version.id` y defensivamente por `versionNumber`.
+Actualizar `pieceReviewApiError()` para devolver:
 
-Cuando existe la versión persistida con el mismo ID, preferir la versión PERSISTIDA.
+- message;
+- status;
+- code.
 
-La persistida tiene signed read URL, uploader, timestamps y metadata server.
+---
 
-La optimistic solo existe hasta que llega PostgreSQL.
+## 15. CLOSED
 
-## 12. Cleanup de optimistic versions
-
-Si una optimistic version ya apareció desde server, eliminarla del state local cuando sea razonable.
-
-Puede ser mediante effect de reconciliación o merge estable.
-
-Evitar loops y acumulación indefinida.
-
-Después de subir V2 y terminar `router.refresh()` debe existir UNA sola:
-
-`V2 · Actual`
-
-y una V1.
-
-Nunca dos V2.
-
-## 13. Retry de finalize
-
-Actualmente cualquier error dentro del bloque:
+Cuando Delivery está cerrada:
 
 ```text
-prepare
-→ PUT
-→ finalize
+status: 409
+code: DELIVERY_CLOSED
+message: La entrega está cerrada.
 ```
 
-termina haciendo cleanup del attempt.
+Frontend NO debe mostrar:
 
-Eso no es correcto después de un PUT exitoso.
+`Hay una versión más nueva`.
 
-Distinguir fases conceptuales:
+Mostrar toast coherente:
+
+Título:
+`La entrega está cerrada`
+
+Descripción opcional:
+`Ya no se pueden guardar cambios en esta entrega.`
+
+Y hacer `router.refresh()` para reconciliar UI si el estado local estaba viejo.
+
+---
+
+## 16. Historical version
+
+Review o feedback a versión que dejó de ser latest:
 
 ```text
-idle
-prepared
-uploading
-uploaded
-finalizing
-finalize-error
+status: 409
+code: HISTORICAL_VERSION
 ```
 
-No hace falta mostrar esos nombres literalmente.
+Mantener UX ya definida:
 
-## 14. PUT failure
+Review:
 
-Si falla browser → R2 PUT:
+Título:
+`Hay una versión más nueva`
 
-- cleanup attempt best-effort;
-- descartar `attemptToken`;
-- conservar File seleccionado;
-- permitir volver a empezar desde prepare.
+Descripción:
+`Revisá la versión actual.`
 
-## 15. Finalize failure recuperable
+Feedback:
 
-Si R2 PUT terminó correctamente pero finalize falla por:
+Título:
+`Hay una versión más nueva`
 
-- network error;
-- 5xx;
-- error DB recuperable;
+Descripción:
+`Tu texto sigue acá. Revisá la versión actual antes de enviarlo.`
 
-NO llamar cleanup.
+No limpiar draft.
 
-Conservar:
+---
 
-- File;
-- attemptToken;
-- uploaded = true;
-- pieceVersionId;
-- versionNumber.
+## 17. Version upload conflict
 
-La próxima acción principal debe ejecutar SOLAMENTE:
-
-`POST finalize`
-
-sin nuevo prepare ni nuevo PUT.
-
-## 16. Razón de idempotencia
-
-Un error de red después de enviar finalize no significa que finalize haya fallado.
-
-Puede haber ocurrido:
+En finalize de PieceVersion, el conflicto de latest version debe devolver código estable:
 
 ```text
-server commit OK
-→ respuesta se pierde
+VERSION_CONFLICT
 ```
 
-Como finalize es idempotente, retry con el MISMO `attemptToken` debe devolver success / `alreadyFinalized`.
-
-Por eso NO borrar R2 inmediatamente.
-
-## 17. Clasificar respuestas finalize
-
-### 409
+con status 409 y mensaje actual:
 
 `La pieza ya tiene una versión más nueva.`
 
-En ese caso:
+Frontend usa CODE, no solamente status 409, para decidir que debe descartar attempt y preparar uno nuevo.
 
-- attempt ya no sirve;
-- server hace best-effort cleanup;
-- descartar attemptToken;
-- mantener File;
-- próximo retry hace prepare nuevo.
+No confundirlo con DELIVERY_CLOSED.
 
-### 400
+---
 
-HEAD mismatch / archivo inválido:
+## 18. ApiRequestError cliente
 
-puede descartarse y limpiarse si corresponde.
+Actualizar helper cliente para guardar:
 
-### 5xx o network
+- status;
+- code;
+- message si sirve.
 
-Preservar attempt para retry finalize.
+Leer JSON de error cuando response no sea ok.
 
-No reducir todo a `Finalize failed`.
+No usar solamente:
 
-## 18. UI retry
-
-Si tenemos upload confirmado + finalize error:
-
-CTA:
-
-`Reintentar`
-
-No volver a mostrar `Subir V2` como si necesitara upload completo.
-
-Al reintentar usar copy discreto:
-
-`Finalizando…`
-
-o
-`Reintentando…`
-
-## 19. Cancel después de upload
-
-Si existe attempt uploaded pero todavía no finalizado y el usuario toca Cancelar explícitamente:
-
-- llamar `cleanup-upload` con attemptToken;
-- después limpiar state local.
-
-Cancelar explícitamente es distinto de un error técnico.
-
-## 20. Modal close
-
-Si existe upload confirmado en R2 pero finalize está pendiente/error:
-
-NO borrar silenciosamente solo porque el modal se cierra.
-
-Mantener attempt durante la vida del componente/sesión.
-
-No implementar localStorage todavía.
-
-## 21. Success finalize
-
-Al success:
-
-- agregar optimistic version una sola vez;
-- limpiar upload attempt;
-- toast;
-- `router.refresh()`;
-- seleccionar nueva versión;
-- `notifyBackupPending()`.
-
-Si `alreadyFinalized`, mismo comportamiento.
-
-## 22. Error copy
-
-### Prepare / PUT
-
-Título:
-
-`No pudimos subir la nueva versión`
-
-### Finalize recuperable
-
-Título:
-
-`No pudimos terminar de guardar la versión`
-
-Descripción:
-
-`El archivo ya está subido. Podés reintentar sin volver a cargarlo.`
-
-### 409 newer version
-
-Título:
-
-`Hay una versión más nueva`
-
-Descripción:
-
-`Volvé a intentar para crear la siguiente versión.`
-
-## 23. No pérdida de File
-
-En todos los errores mantener el File seleccionado salvo:
-
-- success;
-- Cancel explícito.
-
-## 24. Review optimistic rollback
-
-Si review devuelve 409 porque entró V2 mientras esperaba:
-
-- rollback optimistic review;
-- `router.refresh()`;
-- mostrar toast:
-
-Título:
-
-`Hay una versión más nueva`
-
-Descripción:
-
-`Revisá la versión actual.`
-
-No mostrar error técnico genérico.
-
-## 25. Feedback 409
-
-Si entra V2 mientras se enviaba feedback a V1:
-
-- NO limpiar draft;
-- `router.refresh()`;
-- toast:
-
-Título:
-
-`Hay una versión más nueva`
-
-Descripción:
-
-`Tu texto sigue acá. Revisá la versión actual antes de enviarlo.`
-
-El draft queda asociado a V1 durante esa sesión.
-
-No mover automáticamente el feedback a V2.
-
-## 26. Tests de concurrencia
-
-Agregar tests de reglas/integración donde sea viable.
-
-Casos obligatorios:
-
-A. V1 latest, review V1 adquiere lock primero → review success → luego V2.
-
-B. V2 finaliza primero → review V1 después → 409.
-
-C. V2 finaliza primero → feedback V1 después → 409.
-
-D. dos finalize para V2 → uno success → otro conflict/idempotent según receipt correspondiente → nunca dos V2.
-
-E. review sobre V2 funciona normalmente.
-
-## 27. Tests optimistic merge
-
-```text
-persisted [V2, V1]
-optimistic [V2]
-→ [V2, V1]
+```ts
+new ApiRequestError(response.status)
 ```
 
-Persisted debe ganar.
+Crear helper reutilizable si mejora claridad:
 
-## 28. Tests retry state
+```ts
+readApiError(response)
+```
 
-Cubrir, idealmente mediante helper/reducer simple:
+No instalar librerías.
 
-- PUT fail → attempt descartado;
-- finalize 500 → attempt conservado uploaded;
-- network finalize → attempt conservado;
-- finalize 409 → attempt descartado;
-- finalize success → attempt limpiado.
+---
 
-No instalar state-machine library.
+## 19. Review frontend
 
-## 29. Drive
+En failure:
 
-No cambiar arquitectura Drive.
+`HISTORICAL_VERSION`
+→ rollback optimistic
+→ refresh
+→ toast versión más nueva.
 
-Mutations exitosas siguen usando `enqueueDriveBackupRefresh`.
+`DELIVERY_CLOSED`
+→ rollback optimistic
+→ refresh
+→ toast entrega cerrada.
 
-Mutation rechazada por versión histórica:
+Otros errores
+→ rollback
+→ toast genérico actual.
+
+---
+
+## 20. Feedback frontend
+
+`HISTORICAL_VERSION`
+→ preservar draft
+→ refresh
+→ toast versión más nueva.
+
+`DELIVERY_CLOSED`
+→ preservar draft
+→ refresh
+→ toast entrega cerrada.
+
+Otros
+→ preservar draft
+→ toast genérico actual.
+
+---
+
+## 21. Version finalize frontend
+
+Clasificar especialmente:
+
+`VERSION_CONFLICT`
+→ descartar attempt;
+→ mantener File;
+→ próximo retry empieza desde prepare.
+
+`DELIVERY_CLOSED`
+→ descartar attempt si server limpia el asset;
+→ mantener File si aporta valor;
+→ refresh;
+→ mostrar entrega cerrada.
+
+5xx/network
+→ mantener attempt uploaded para retry finalize.
+
+No perder la lógica correcta implementada en el hardening anterior.
+
+---
+
+## 22. Compatibilidad
+
+No romper endpoints existentes para casos success.
+
+Success responses quedan como están.
+
+Solo mejorar error payload.
+
+---
+
+## 23. Tests unitarios de error codes
+
+Agregar tests para:
+
+- CLOSED → DELIVERY_CLOSED;
+- historical version → HISTORICAL_VERSION;
+- version conflict → VERSION_CONFLICT;
+- frontend resolution distingue dos 409 distintos;
+- 500 sigue tratamiento genérico/retry según flujo.
+
+---
+
+## 24. Test de concurrencia real
+
+El bug de Delivery.status es de base de datos, no solo de funciones puras.
+
+Si la infraestructura de tests actual permite usar PostgreSQL de test sin convertir este bloque en un proyecto grande, agregar al menos UN integration test real que ejecute dos transactions concurrentes sobre dos Pieces de la misma Delivery y confirme que el Delivery lock serializa correctamente.
+
+Caso prioritario:
+
+```text
+SENT_FOR_REVIEW
+Piece A → NEEDS_CHANGES
+Piece B → OK
+final = CHANGES_REQUESTED
+```
+
+Si el repo no tiene DB integration-test harness y construirlo sería desproporcionado:
+
+- NO inventar un mock que pretenda demostrar row locking;
+- documentar explícitamente el blocker;
+- sí agregar tests unitarios de helpers/error handling;
+- describir un manual test reproducible con PostgreSQL real.
+
+---
+
+## 25. Journal
+
+No agregar eventos nuevos por locking o error codes.
+
+Mantener Journal existente.
+
+Solo las mutations exitosas crean eventos.
+
+Request rechazado:
+
+NO Journal.
+
+---
+
+## 26. Drive
+
+Sin cambios de arquitectura.
+
+Mutation exitosa:
+
+`enqueueDriveBackupRefresh()` como actualmente.
+
+Mutation rechazada:
 
 NO enqueue.
 
-## 30. Visual Review
+---
 
-Mantener Visual Review sin DB/R2/Drive real.
+## 27. Visual Review
 
-No hace falta simular carreras.
+Debe seguir funcionando sin DB/R2/Drive/OAuth reales.
 
-Sí aplicar dedupe/reconciliación porque el componente es compartido.
+No requiere simular row locks.
 
-## 31. Mobile
+Error code helpers cliente pueden ser compartidos si no introducen llamadas reales.
 
-Confirmar:
+---
 
-- subir V2;
-- success;
-- no aparece duplicada;
-- cerrar/abrir modal;
-- V2 sigue current;
-- V1 histórica read-only;
-- retry finalize no rompe sticky review actions.
-
-## 32. Validación
+## 28. Validación técnica
 
 Ejecutar:
 
@@ -600,32 +630,36 @@ npm run build
 npx prisma validate
 ```
 
-## 33. Resultado esperado
+Revisar también que no haya cambios accidentales de schema/migration.
+
+---
+
+## 29. Resultado esperado
 
 Reportar:
 
-1. estrategia de locking;
-2. review race;
-3. feedback race;
-4. finalize race;
-5. DeliveryStatus dentro del lock;
-6. dedupe optimistic/persisted;
-7. retry finalize;
-8. cleanup rules;
-9. error handling 409;
-10. draft preservation;
-11. Visual Review;
-12. tests;
+1. estrategia de Delivery lock;
+2. orden de locks Delivery→Piece;
+3. review concurrente entre Pieces;
+4. feedback concurrente;
+5. finalize version concurrente;
+6. error codes server;
+7. error parsing cliente;
+8. HISTORICAL_VERSION UX;
+9. DELIVERY_CLOSED UX;
+10. VERSION_CONFLICT UX;
+11. tests unitarios;
+12. integration test real o blocker explícito;
 13. lint;
 14. typecheck;
 15. build;
 16. prisma validate;
 17. git status.
 
-Si queda correcto:
+Si todo queda correcto:
 
 ```text
-commit: fix: harden versioned piece mutations
+commit: fix: serialize delivery review mutations
 push: main
 ```
 
