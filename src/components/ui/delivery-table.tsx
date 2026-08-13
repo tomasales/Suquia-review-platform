@@ -1,22 +1,22 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
-import type { DeliverySummary } from "@/types/domain";
+import type { DeliveryListItem } from "@/lib/deliveries";
 
 type DeliveryTableProps = {
-  deliveries: DeliverySummary[];
+  deliveries: DeliveryListItem[];
+  variant?: "compact" | "full";
 };
 
-const statusTone: Record<DeliverySummary["status"], Parameters<typeof Badge>[0]["tone"]> = {
-  "Aprobada": "success",
-  "Cerrada": "neutral",
-  "En revisión": "info",
-  "Enviado para revisar": "neutral",
-  "Requiere cambios": "warning",
-};
+export function DeliveryTable({
+  deliveries,
+  variant = "full",
+}: DeliveryTableProps) {
+  const showAuthor = variant === "full";
 
-export function DeliveryTable({ deliveries }: DeliveryTableProps) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] border-collapse text-left">
+      <table className="w-full min-w-[760px] border-collapse text-left">
         <thead>
           <tr className="border-b border-border text-xs font-medium text-subtle-foreground">
             <th className="pb-2 pr-4">Entrega</th>
@@ -24,7 +24,8 @@ export function DeliveryTable({ deliveries }: DeliveryTableProps) {
             <th className="pb-2 pr-4">Piezas</th>
             <th className="pb-2 pr-4">Estado</th>
             <th className="pb-2 pr-4">Resumen</th>
-            <th className="pb-2">Última actividad</th>
+            <th className="pb-2 pr-4">Fecha</th>
+            {showAuthor ? <th className="pb-2">Autor</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -35,31 +36,39 @@ export function DeliveryTable({ deliveries }: DeliveryTableProps) {
             >
               <td className="py-3 pr-4">
                 <div>
-                  <p className="text-sm font-medium text-foreground">
+                  <Link
+                    className="text-sm font-medium text-foreground hover:underline"
+                    href={`/deliveries/${delivery.id}`}
+                  >
                     {delivery.title}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {delivery.author} · {delivery.date}
-                  </p>
+                  </Link>
+                  {!showAuthor ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {delivery.authorLabel}
+                    </p>
+                  ) : null}
                 </div>
               </td>
               <td className="py-3 pr-4 text-sm text-muted-foreground">
-                {delivery.type}
+                {delivery.typeLabel}
               </td>
               <td className="py-3 pr-4 text-sm text-muted-foreground">
-                {delivery.pieces}
+                {delivery.pieceCountLabel}
               </td>
               <td className="py-3 pr-4">
-                <Badge tone={statusTone[delivery.status]}>
-                  {delivery.status}
-                </Badge>
+                <Badge tone={delivery.statusTone}>{delivery.statusLabel}</Badge>
               </td>
               <td className="py-3 pr-4 text-sm text-muted-foreground">
                 {delivery.reviewSummary}
               </td>
-              <td className="py-3 text-sm text-muted-foreground">
-                {delivery.lastActivity}
+              <td className="py-3 pr-4 text-sm text-muted-foreground">
+                {delivery.dateLabel}
               </td>
+              {showAuthor ? (
+                <td className="py-3 text-sm text-muted-foreground">
+                  {delivery.authorLabel}
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

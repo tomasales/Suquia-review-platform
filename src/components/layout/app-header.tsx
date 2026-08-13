@@ -39,7 +39,7 @@ export function AppHeader({ user }: AppHeaderProps) {
         <div className="hidden min-w-0 flex-1 items-center sm:flex">
           <div className="flex h-9 w-full max-w-[440px] items-center gap-2 rounded-[8px] border border-border bg-background px-3 text-muted-foreground">
             <Search className="size-4" />
-            <span className="text-sm">Buscar entregas, feedback o notas</span>
+            <span className="text-sm">Búsqueda pendiente de configurar</span>
           </div>
         </div>
 
