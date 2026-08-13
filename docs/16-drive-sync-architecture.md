@@ -3,8 +3,10 @@
 ## Principios
 
 - PostgreSQL es la fuente operativa de la experiencia.
+- Cloudflare R2 es el almacenamiento operativo principal de archivos.
 - Google Drive es backup completo, organizado y recuperable.
 - El backend es el único actor que escribe en Drive.
+- La aplicación no depende de Drive para aceptar una entrega si los archivos ya están seguros en R2.
 - No borrar automáticamente backups de Drive cuando una entrega se elimina de la plataforma.
 - No escanear todo Drive para recuperar eliminadas; usar `deleted_entries.json`.
 - Toda operación relevante genera Journal.
@@ -78,7 +80,19 @@ El nombre visible puede incluir el título generado para lectura humana, pero el
 
 La convención final de nombres sigue pendiente. La arquitectura exige que los IDs inmutables estén en manifest.
 
-## Uploads
+## Storage operativo y uploads
+
+Los uploads reales no deben persistirse en filesystem local de Render, `/tmp`, memoria del proceso ni carpetas del proyecto. El archivo viaja:
+
+```text
+browser → R2
+```
+
+mediante URL PUT presignada corta generada por backend. Luego el backend confirma el objeto con HEAD antes de considerar que el asset está listo para una transacción futura de Delivery/Piece/PieceVersion.
+
+La DB guarda metadata y `storageKey`; no guarda URLs presignadas. La URL de lectura también es temporal y se genera solo cuando la UI necesita mostrar el archivo.
+
+## Uploads a Drive
 
 La Drive API permite crear archivos y carpetas con `files.create`. Las carpetas son archivos con MIME type `application/vnd.google-apps.folder`.
 
@@ -221,25 +235,29 @@ La decisión de estado restaurado queda abierta en `13-open-decisions.md`.
 ### Caso normal
 
 1. Usuario completa tipo, archivos, orden y notas.
-2. Backend recibe archivos y metadata.
-3. Backend valida sesión y allowlist.
-4. Backend crea Delivery, Pieces y PieceVersions en transacción.
-5. Backend crea SyncOperation `PENDING`.
-6. Backend ejecuta health check Drive actual.
-7. Si Drive responde, SyncOperation pasa a `SYNCING`.
-8. Backend crea carpetas, sube archivos, escribe manifest y journal.
-9. Backend guarda IDs de Drive.
-10. SyncOperation pasa a `SYNCED`.
-11. Journal registra entrega creada/enviada y sincronización exitosa.
+2. Backend valida sesión y allowlist.
+3. Backend emite URLs PUT presignadas para R2.
+4. Browser sube cada archivo directo a R2 con el mismo `Content-Type` usado al firmar.
+5. Backend confirma cada objeto con HEAD.
+6. Backend crea Delivery, Pieces y PieceVersions en transacción, guardando `storageKey`.
+7. Backend crea SyncOperation `PENDING`.
+8. Backend ejecuta health check Drive actual.
+9. Si Drive responde, SyncOperation pasa a `SYNCING`.
+10. Backend copia/sube archivos desde storage operativo a Drive, escribe manifest y journal.
+11. Backend guarda IDs de Drive.
+12. SyncOperation pasa a `SYNCED`.
+13. Journal registra entrega creada/enviada y sincronización exitosa.
 
 ### Drive caído
 
 1. Backend conserva Delivery, Pieces, PieceVersions, notas y metadata.
-2. Archivos quedan en almacenamiento operativo temporal/persistente definido para MVP.
+2. Archivos quedan en Cloudflare R2 como almacenamiento operativo persistente.
 3. SyncOperation queda `FAILED`.
 4. Usuario ve error claro y botón **Reintentar**.
 5. Journal registra fallo.
 6. No hay retry automático inesperado.
+
+Drive failure no invalida la Delivery si R2 y PostgreSQL están consistentes.
 
 ## Estados técnicos de SyncOperation
 

@@ -13,7 +13,7 @@ La documentación funcional existente sigue siendo la fuente de verdad. Esta arq
 - **Base de datos operativa**: PostgreSQL.
 - **Acceso a datos**: Prisma ORM.
 - **Autenticación**: Auth.js con Google OAuth.
-- **Archivos operativos**: almacenamiento temporal/operativo controlado por backend; Drive como backup persistente.
+- **Archivos operativos**: Cloudflare R2 como almacenamiento privado principal de blobs.
 - **Google Drive**: Drive API v3 desde backend.
 - **Jobs en segundo plano**: tabla de jobs en PostgreSQL más worker simple dentro del mismo despliegue o proceso separado mínimo si Render lo exige.
 - **AI Memory**: procesamiento incremental de feedback de Tomi con LLM externo configurable.
@@ -50,6 +50,22 @@ Según la documentación oficial de Next.js, una app Next.js puede desplegarse c
 - **Impacto en complejidad**: baja para un modelo relacional.
 
 Drive no reemplaza la base operativa. Drive es backup recuperable.
+
+### Cloudflare R2 como storage operativo
+
+- **Decisión**: usar Cloudflare R2 como almacenamiento operativo principal de archivos.
+- **Por qué**: Render tiene filesystem efímero y no debe conservar uploads reales en disco local, `/tmp`, memoria del proceso ni carpetas del proyecto. R2 ofrece blobs privados persistentes mediante API compatible con S3.
+- **Alternativa descartada**: depender de Google Drive como storage primario de uploads.
+- **Impacto en costos**: agrega costo de storage/bandwidth bajo y proporcional al uso.
+- **Impacto en complejidad**: introduce signed URLs y validación de objetos, pero evita límites de memoria/transferencia del servidor.
+
+Responsabilidades:
+
+- **PostgreSQL**: metadata, estado, relaciones, `storageKey`, IDs de Drive y jobs.
+- **Cloudflare R2**: archivos operativos privados.
+- **Google Drive**: backup estructurado, recuperación y organización posterior.
+
+Los objetos R2 se referencian por `storageKey` estable. No se guardan URLs presignadas en la base de datos.
 
 ### Prisma ORM
 
@@ -106,13 +122,30 @@ La autorización de usuarios se modela de forma simple con allowlist/configuraci
 1. Usuario inicia sesión con Google.
 2. Backend valida que el usuario esté autorizado.
 3. Usuario crea entrega y selecciona piezas.
-4. Backend persiste entrega, piezas, versiones iniciales y operación de sincronización.
-5. Backend intenta crear/actualizar backup en Drive.
-6. Journal registra eventos relevantes.
-7. Feedback de Tomi genera job de AI Memory.
-8. Worker procesa el feedback con LLM y guarda AIKnowledgeEntry.
-9. Dashboard y búsqueda leen de PostgreSQL.
-10. Drive queda disponible para restauración si una entrega fue eliminada de la plataforma.
+4. Frontend pide al backend URLs PUT presignadas para R2.
+5. Browser sube archivos directamente a R2.
+6. Backend confirma los objetos con HEAD.
+7. Backend persiste entrega, piezas, versiones iniciales y operación de sincronización.
+8. Backend encola sincronización a Drive.
+9. Journal registra eventos relevantes.
+10. Feedback de Tomi genera job de AI Memory.
+11. Worker procesa el feedback con LLM y guarda AIKnowledgeEntry.
+12. Dashboard y búsqueda leen de PostgreSQL.
+13. Drive queda disponible para restauración si una entrega fue eliminada de la plataforma.
+
+Flujo futuro de creación real:
+
+```text
+Browser
+→ request signed PUT
+→ R2 upload
+→ server HEAD verification
+→ DB transaction creates Delivery/Piece/PieceVersion
+→ enqueue Drive sync
+→ redirect detail
+```
+
+Si Drive falla, la Delivery no se invalida. El archivo ya está en R2, la metadata queda en PostgreSQL y la sincronización a Drive queda pendiente/fallida para reintento.
 
 ## Límites intencionales
 

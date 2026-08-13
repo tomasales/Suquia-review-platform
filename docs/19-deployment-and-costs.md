@@ -19,6 +19,7 @@ Limitación crítica: Render Postgres Free expira a los 30 días y no tiene back
 
 - Render Web Service Starter o Free si se acepta cold start.
 - PostgreSQL pago mínimo en Render o proveedor Postgres externo con plan gratuito persistente si se prioriza costo cero.
+- Cloudflare R2 para archivos operativos privados.
 - Sin worker separado al inicio: worker simple dentro del Web Service, activado por endpoint interno o loop controlado.
 - Drive API con service account.
 - LLM externo de bajo costo.
@@ -42,7 +43,7 @@ Free Web Services:
 - no soportan persistent disks;
 - pueden reiniciarse.
 
-Implicación: no guardar uploads únicamente en filesystem local del Web Service.
+Implicación: no guardar uploads en filesystem local del Web Service. Los blobs operativos se guardan en Cloudflare R2 y PostgreSQL conserva metadata/keys.
 
 Render Postgres Free:
 
@@ -77,6 +78,11 @@ Mínimas:
 - `AUTH_SECRET`;
 - `AUTH_GOOGLE_ID`;
 - `AUTH_GOOGLE_SECRET`;
+- `R2_ACCOUNT_ID`;
+- `R2_ACCESS_KEY_ID`;
+- `R2_SECRET_ACCESS_KEY`;
+- `R2_BUCKET_NAME`;
+- `R2_ENDPOINT`;
 - `GOOGLE_SERVICE_ACCOUNT_JSON` o campos equivalentes;
 - `DRIVE_ROOT_FOLDER_ID`;
 - `DRIVE_STORIES_FOLDER_ID`;
@@ -129,8 +135,64 @@ No agregar plataforma compleja de observabilidad en MVP.
 - Free tier de Render no es producción estable.
 - Postgres Free expira.
 - Filesystem local efímero exige almacenamiento operativo persistente o subida rápida a Drive.
+- R2 requiere configurar CORS correctamente para uploads directos desde browser.
 - Jobs dentro del Web Service pueden pausarse si el servicio duerme.
 - Drive API puede fallar por permisos mal configurados aunque la app funcione.
+
+## Cloudflare R2
+
+El bucket debe ser privado. No configurar assets públicos para materiales internos de SUQUIA.
+
+La aplicación usa:
+
+- PUT presignado corto para upload directo `browser → R2`;
+- GET presignado temporal para lectura;
+- HEAD para confirmar existencia, tamaño y content type;
+- DELETE para limpieza de objetos `pending/...` cuando corresponda.
+
+`R2_ENDPOINT` tiene la forma:
+
+```text
+https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+```
+
+### CORS requerido
+
+Development debe permitir:
+
+- `http://localhost:3000`;
+- el origen LAN usado para Visual Review en iPhone, por ejemplo `http://192.168.0.177:3000`.
+
+Production debe permitir solo el dominio final de SUQUIA.
+
+Métodos mínimos:
+
+- `PUT`;
+- `GET`;
+- `HEAD`.
+
+Headers mínimos:
+
+- `Content-Type`.
+
+Ejemplo conceptual:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:3000",
+      "http://192.168.0.177:3000"
+    ],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3000
+  }
+]
+```
+
+No usar wildcard de origins en producción.
 
 ## Referencias oficiales verificadas
 
