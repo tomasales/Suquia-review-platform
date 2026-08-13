@@ -8,9 +8,8 @@ import {
 } from "@/lib/delivery-upload-receipt";
 import { db } from "@/lib/db";
 import { enqueueDriveBackupRefresh } from "@/lib/drive/enqueue";
-import {
-  buildDeliveryStatusJournalMetadata,
-} from "@/lib/piece-review-rules";
+import { lockPieceForMutation } from "@/lib/piece-mutation-lock";
+import { buildDeliveryStatusJournalMetadata } from "@/lib/piece-review-rules";
 import {
   assertPieceVersionStorageKey,
   PieceVersionUploadError,
@@ -81,56 +80,6 @@ export async function POST(
       throw new PieceVersionUploadError("La versión ya existe.", 409);
     }
 
-    const piece = await db.piece.findUnique({
-      where: {
-        id: receipt.pieceId,
-      },
-      select: {
-        delivery: {
-          select: {
-            deletedAt: true,
-            id: true,
-            status: true,
-          },
-        },
-        id: true,
-        versions: {
-          orderBy: {
-            versionNumber: "desc",
-          },
-          select: {
-            id: true,
-            versionNumber: true,
-          },
-          take: 1,
-        },
-      },
-    });
-
-    if (!piece || piece.delivery.deletedAt) {
-      await deleteUploadedObjectBestEffort(receipt.storageKey);
-      throw new PieceVersionUploadError("La pieza no existe.", 404);
-    }
-
-    if (piece.delivery.status === DeliveryStatus.CLOSED) {
-      await deleteUploadedObjectBestEffort(receipt.storageKey);
-      throw new PieceVersionUploadError("La entrega está cerrada.", 409);
-    }
-
-    const latestVersion = piece.versions[0] ?? null;
-
-    if (
-      !latestVersion ||
-      latestVersion.id !== receipt.previousLatestVersionId ||
-      latestVersion.versionNumber !== receipt.previousLatestVersionNumber
-    ) {
-      await deleteUploadedObjectBestEffort(receipt.storageKey);
-      throw new PieceVersionUploadError(
-        "La pieza ya tiene una versión más nueva.",
-        409,
-      );
-    }
-
     const verification = await verifyUploadedObject({
       expectedFileSizeBytes: receipt.fileSizeBytes,
       expectedMimeType: receipt.mimeType,
@@ -138,6 +87,7 @@ export async function POST(
     });
 
     if (!verification.ok) {
+      await deleteUploadedObjectBestEffort(receipt.storageKey);
       throw new PieceVersionUploadError(
         `No pudimos verificar ${receipt.filename}.`,
         400,
@@ -145,13 +95,93 @@ export async function POST(
     }
 
     const uploadedAt = new Date();
-    const nextDeliveryStatus =
-      piece.delivery.status === DeliveryStatus.SENT_FOR_REVIEW
-        ? piece.delivery.status
-        : DeliveryStatus.SENT_FOR_REVIEW;
 
     try {
-      await db.$transaction(async (tx) => {
+      const finalized = await db.$transaction(async (tx) => {
+        await lockPieceForMutation(tx, receipt.pieceId);
+
+        const existingVersionInTransaction = await tx.pieceVersion.findUnique({
+          where: {
+            id: receipt.newPieceVersionId,
+          },
+          select: {
+            id: true,
+            pieceId: true,
+            storageKey: true,
+            versionNumber: true,
+          },
+        });
+
+        if (existingVersionInTransaction) {
+          if (
+            existingVersionInTransaction.pieceId === receipt.pieceId &&
+            existingVersionInTransaction.storageKey === receipt.storageKey &&
+            existingVersionInTransaction.versionNumber ===
+              receipt.nextVersionNumber
+          ) {
+            return {
+              alreadyFinalized: true,
+              pieceId: receipt.pieceId,
+              pieceVersionId: receipt.newPieceVersionId,
+              versionNumber: receipt.nextVersionNumber,
+            };
+          }
+
+          throw new PieceVersionUploadError("La versión ya existe.", 409);
+        }
+
+        const piece = await tx.piece.findUnique({
+          where: {
+            id: receipt.pieceId,
+          },
+          select: {
+            delivery: {
+              select: {
+                deletedAt: true,
+                id: true,
+                status: true,
+              },
+            },
+            id: true,
+            versions: {
+              orderBy: {
+                versionNumber: "desc",
+              },
+              select: {
+                id: true,
+                versionNumber: true,
+              },
+              take: 1,
+            },
+          },
+        });
+
+        if (!piece || piece.delivery.deletedAt) {
+          throw new PieceVersionUploadError("La pieza no existe.", 404);
+        }
+
+        if (piece.delivery.status === DeliveryStatus.CLOSED) {
+          throw new PieceVersionUploadError("La entrega está cerrada.", 409);
+        }
+
+        const latestVersion = piece.versions[0] ?? null;
+
+        if (
+          !latestVersion ||
+          latestVersion.id !== receipt.previousLatestVersionId ||
+          latestVersion.versionNumber !== receipt.previousLatestVersionNumber
+        ) {
+          throw new PieceVersionUploadError(
+            "La pieza ya tiene una versión más nueva.",
+            409,
+          );
+        }
+
+        const nextDeliveryStatus =
+          piece.delivery.status === DeliveryStatus.SENT_FOR_REVIEW
+            ? piece.delivery.status
+            : DeliveryStatus.SENT_FOR_REVIEW;
+
         await tx.pieceVersion.create({
           data: {
             fileSizeBytes: BigInt(receipt.fileSizeBytes),
@@ -221,8 +251,21 @@ export async function POST(
           entityType: "PIECE_VERSION",
           reason: "piece-version-uploaded",
         });
+
+        return {
+          alreadyFinalized: false,
+          pieceId: receipt.pieceId,
+          pieceVersionId: receipt.newPieceVersionId,
+          versionNumber: receipt.nextVersionNumber,
+        };
       });
+
+      return NextResponse.json(finalized);
     } catch (error) {
+      if (shouldCleanupUploadedObject(error)) {
+        await deleteUploadedObjectBestEffort(receipt.storageKey);
+      }
+
       if (isUniqueConstraintError(error)) {
         await deleteUploadedObjectBestEffort(receipt.storageKey);
         throw new PieceVersionUploadError(
@@ -233,13 +276,6 @@ export async function POST(
 
       throw error;
     }
-
-    return NextResponse.json({
-      alreadyFinalized: false,
-      pieceId: receipt.pieceId,
-      pieceVersionId: receipt.newPieceVersionId,
-      versionNumber: receipt.nextVersionNumber,
-    });
   } catch (error) {
     const apiError = pieceVersionUploadApiError(error);
 
@@ -248,6 +284,15 @@ export async function POST(
       { status: apiError.status },
     );
   }
+}
+
+function shouldCleanupUploadedObject(error: unknown) {
+  return (
+    error instanceof PieceVersionUploadError &&
+    (error.status === 404 ||
+      error.status === 409 ||
+      error.message === "La pieza ya tiene una versión más nueva.")
+  );
 }
 
 async function deleteUploadedObjectBestEffort(storageKey: string) {

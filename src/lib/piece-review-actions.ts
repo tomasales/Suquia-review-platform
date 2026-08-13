@@ -4,6 +4,7 @@ import { FeedbackLevel } from "@prisma/client";
 
 import { db } from "@/lib/db";
 import { enqueueDriveBackupRefresh } from "@/lib/drive/enqueue";
+import { lockPieceForMutation } from "@/lib/piece-mutation-lock";
 import {
   assertDeliveryCanBeReviewed,
   buildDeliveryStatusJournalMetadata,
@@ -49,70 +50,73 @@ export async function updatePieceReviewState({
     throw new PieceReviewValidationError("Versión de pieza inválida.");
   }
 
-  const piece = await db.piece.findUnique({
-    where: { id: pieceId },
-    select: {
-      id: true,
-      delivery: {
-        select: {
-          deletedAt: true,
-          id: true,
-          status: true,
+  return db.$transaction(async (tx) => {
+    await lockPieceForMutation(tx, pieceId);
+
+    const piece = await tx.piece.findUnique({
+      where: { id: pieceId },
+      select: {
+        id: true,
+        delivery: {
+          select: {
+            deletedAt: true,
+            id: true,
+            status: true,
+          },
+        },
+        versions: {
+          orderBy: {
+            versionNumber: "desc",
+          },
+          select: {
+            id: true,
+            reviewState: true,
+            versionNumber: true,
+          },
+          take: 1,
         },
       },
-      versions: {
-        orderBy: {
-          versionNumber: "desc",
+    });
+
+    if (!piece || piece.delivery.deletedAt) {
+      throw new PieceReviewValidationError("La pieza no existe.", 404);
+    }
+
+    assertDeliveryCanBeReviewed(piece.delivery.status);
+
+    const latestVersion = piece.versions[0] ?? null;
+
+    if (!latestVersion || latestVersion.id !== pieceVersionId) {
+      throw new PieceReviewValidationError(
+        "Esta versión ya forma parte del historial.",
+        409,
+      );
+    }
+
+    if (
+      isPieceReviewStateNoop({
+        currentState: latestVersion.reviewState,
+        nextState: nextReviewState,
+      })
+    ) {
+      return {
+        delivery: {
+          id: piece.delivery.id,
+          status: piece.delivery.status,
         },
-        select: {
-          id: true,
-          reviewState: true,
-          versionNumber: true,
+        piece: {
+          id: piece.id,
+          reviewState: latestVersion.reviewState,
+          versionId: latestVersion.id,
         },
-        take: 1,
-      },
-    },
-  });
+      };
+    }
 
-  if (!piece || piece.delivery.deletedAt) {
-    throw new PieceReviewValidationError("La pieza no existe.", 404);
-  }
+    const nextDeliveryStatus = getDeliveryStatusAfterPieceReview({
+      currentStatus: piece.delivery.status,
+      nextReviewState,
+    });
 
-  assertDeliveryCanBeReviewed(piece.delivery.status);
-
-  const latestVersion = piece.versions[0] ?? null;
-
-  if (!latestVersion || latestVersion.id !== pieceVersionId) {
-    throw new PieceReviewValidationError(
-      "Esta versión ya forma parte del historial.",
-      409,
-    );
-  }
-
-  if (
-    isPieceReviewStateNoop({
-      currentState: latestVersion.reviewState,
-      nextState: nextReviewState,
-    })
-  ) {
-    return {
-      delivery: {
-        id: piece.delivery.id,
-        status: piece.delivery.status,
-      },
-      piece: {
-        id: piece.id,
-        reviewState: latestVersion.reviewState,
-      },
-    };
-  }
-
-  const nextDeliveryStatus = getDeliveryStatusAfterPieceReview({
-    currentStatus: piece.delivery.status,
-    nextReviewState,
-  });
-
-  await db.$transaction(async (tx) => {
     await tx.pieceVersion.update({
       data: {
         reviewState: nextReviewState,
@@ -173,19 +177,19 @@ export async function updatePieceReviewState({
       entityType: "PIECE",
       reason: "piece-review",
     });
-  });
 
-  return {
-    delivery: {
-      id: piece.delivery.id,
-      status: nextDeliveryStatus,
-    },
-    piece: {
-      id: piece.id,
-      reviewState: nextReviewState,
-      versionId: latestVersion.id,
-    },
-  };
+    return {
+      delivery: {
+        id: piece.delivery.id,
+        status: nextDeliveryStatus,
+      },
+      piece: {
+        id: piece.id,
+        reviewState: nextReviewState,
+        versionId: latestVersion.id,
+      },
+    };
+  });
 }
 
 export async function addPieceFeedback({
@@ -205,60 +209,67 @@ export async function addPieceFeedback({
     throw new PieceReviewValidationError("Versión de pieza inválida.");
   }
 
-  const piece = await db.piece.findUnique({
-    where: { id: pieceId },
-    select: {
-      id: true,
-      delivery: {
-        select: {
-          deletedAt: true,
-          id: true,
-          status: true,
-        },
-      },
-      versions: {
-        orderBy: {
-          versionNumber: "desc",
-        },
-        select: {
-          id: true,
-        },
-        take: 1,
-      },
-    },
-  });
-
-  if (!piece || piece.delivery.deletedAt) {
-    throw new PieceReviewValidationError("La pieza no existe.", 404);
-  }
-
-  assertDeliveryCanBeReviewed(piece.delivery.status);
-
-  const version = await db.pieceVersion.findFirst({
-    where: {
-      id: pieceVersionId,
-      pieceId: piece.id,
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  if (!version) {
-    throw new PieceReviewValidationError("La versión no corresponde a esta pieza.");
-  }
-
-  if (piece.versions[0]?.id !== version.id) {
-    throw new PieceReviewValidationError(
-      "Esta versión ya forma parte del historial.",
-      409,
-    );
-  }
-
   const sourceType = getFeedbackSourceType(user.isAiLearningSource);
-  const nextDeliveryStatus = getDeliveryStatusAfterFeedback(piece.delivery.status);
 
-  const createdFeedback = await db.$transaction(async (tx) => {
+  return db.$transaction(async (tx) => {
+    await lockPieceForMutation(tx, pieceId);
+
+    const piece = await tx.piece.findUnique({
+      where: { id: pieceId },
+      select: {
+        id: true,
+        delivery: {
+          select: {
+            deletedAt: true,
+            id: true,
+            status: true,
+          },
+        },
+        versions: {
+          orderBy: {
+            versionNumber: "desc",
+          },
+          select: {
+            id: true,
+          },
+          take: 1,
+        },
+      },
+    });
+
+    if (!piece || piece.delivery.deletedAt) {
+      throw new PieceReviewValidationError("La pieza no existe.", 404);
+    }
+
+    assertDeliveryCanBeReviewed(piece.delivery.status);
+
+    const version = await tx.pieceVersion.findFirst({
+      where: {
+        id: pieceVersionId,
+        pieceId: piece.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!version) {
+      throw new PieceReviewValidationError(
+        "La versión no corresponde a esta pieza.",
+      );
+    }
+
+    if (piece.versions[0]?.id !== version.id) {
+      throw new PieceReviewValidationError(
+        "Esta versión ya forma parte del historial.",
+        409,
+      );
+    }
+
+    const nextDeliveryStatus = getDeliveryStatusAfterFeedback(
+      piece.delivery.status,
+    );
+
     const feedback = await tx.feedback.create({
       data: {
         authorUserId: user.id,
@@ -332,22 +343,20 @@ export async function addPieceFeedback({
       reason: "feedback-added",
     });
 
-    return feedback;
+    return {
+      delivery: {
+        id: piece.delivery.id,
+        status: nextDeliveryStatus,
+      },
+      feedback: {
+        author: feedback.author.name ?? feedback.author.email,
+        body: feedback.body,
+        createdAtLabel: formatFeedbackDate(feedback.createdAt),
+        id: feedback.id,
+        sourceType: feedback.sourceType,
+      },
+    };
   });
-
-  return {
-    delivery: {
-      id: piece.delivery.id,
-      status: nextDeliveryStatus,
-    },
-    feedback: {
-      author: createdFeedback.author.name ?? createdFeedback.author.email,
-      body: createdFeedback.body,
-      createdAtLabel: formatFeedbackDate(createdFeedback.createdAt),
-      id: createdFeedback.id,
-      sourceType: createdFeedback.sourceType,
-    },
-  };
 }
 
 export function pieceReviewApiError(error: unknown) {

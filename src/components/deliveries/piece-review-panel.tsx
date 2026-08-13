@@ -32,6 +32,7 @@ type PieceReviewPanelProps = {
     error: string | null;
     file: File | null;
     isUploading: boolean;
+    phase: string;
   };
 };
 
@@ -57,6 +58,16 @@ export function PieceReviewPanel({
   const state = getReviewStatePresentation(reviewState);
   const nextVersionNumber = (piece.versions[0]?.versionNumber ?? 0) + 1;
   const isInteractionDisabled = isReadOnly || !isLatestVersion;
+  const isFinalizeRetry = versionUpload.phase === "finalize-error";
+  const isVersionUploadBlocked =
+    versionUpload.isUploading || versionUpload.phase === "invalid";
+  const versionUploadLabel = versionUpload.isUploading
+    ? versionUpload.phase === "finalizing"
+      ? "Finalizando..."
+      : "Subiendo..."
+    : isFinalizeRetry
+      ? "Reintentar"
+      : `Subir V${nextVersionNumber}`;
 
   return (
     <aside
@@ -336,16 +347,12 @@ export function PieceReviewPanel({
                       Cancelar
                     </Button>
                     <Button
-                      disabled={
-                        versionUpload.isUploading || Boolean(versionUpload.error)
-                      }
+                      disabled={isVersionUploadBlocked}
                       onClick={onVersionUpload}
                       size="sm"
                       variant="primary"
                     >
-                      {versionUpload.isUploading
-                        ? "Subiendo..."
-                        : `Subir V${nextVersionNumber}`}
+                      {versionUploadLabel}
                     </Button>
                   </div>
                 </div>

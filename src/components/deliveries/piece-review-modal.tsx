@@ -37,6 +37,7 @@ type PieceReviewModalProps = {
     error: string | null;
     file: File | null;
     isUploading: boolean;
+    phase: string;
   };
 };
 

@@ -9,16 +9,35 @@ import type { DeliveryDetail } from "@/lib/deliveries";
 
 import { PieceGrid } from "./piece-grid";
 import { PieceReviewModal } from "./piece-review-modal";
+import {
+  getOptimisticVersionIdsToDrop,
+  mergePieceVersions,
+  resolveFinalizeFailure,
+} from "./piece-version-client-state";
 
 type Piece = DeliveryDetail["pieces"][number];
 type PieceFeedback = Piece["versions"][number]["feedback"][number];
 type PieceVersion = Piece["versions"][number];
 type ReviewState = Piece["reviewState"];
+type VersionUploadFlowPhase = "prepare" | "upload" | "finalize";
 
 type VersionUploadState = {
+  attemptToken: string | null;
   error: string | null;
   file: File | null;
   isUploading: boolean;
+  phase:
+    | "idle"
+    | "invalid"
+    | "selected"
+    | "preparing"
+    | "uploading"
+    | "uploaded"
+    | "finalizing"
+    | "finalize-error";
+  pieceVersionId: string | null;
+  uploaded: boolean;
+  versionNumber: number | null;
 };
 
 type PrepareVersionResponse = {
@@ -34,9 +53,14 @@ type FinalizeVersionResponse = {
 };
 
 const defaultUploadState: VersionUploadState = {
+  attemptToken: null,
   error: null,
   file: null,
   isUploading: false,
+  phase: "idle",
+  pieceVersionId: null,
+  uploaded: false,
+  versionNumber: null,
 };
 
 const maxVersionFileSizeBytes = 25 * 1024 * 1024;
@@ -82,7 +106,10 @@ export function PieceReviewExperience({
   const pieceItems = useMemo(
     () =>
       pieces.map((piece) => {
-        const versions = [...(localVersions[piece.id] ?? []), ...piece.versions]
+        const versions = mergePieceVersions(
+          piece.versions,
+          localVersions[piece.id] ?? [],
+        )
           .map((version) => {
             const reviewState = reviewOverrides[version.id] ?? version.reviewState;
             const presentation = getVersionReviewPresentation(reviewState);
@@ -223,13 +250,24 @@ export function PieceReviewExperience({
       });
 
       if (!response.ok) {
-        throw new Error("Review request failed.");
+        throw new ApiRequestError(response.status);
       }
 
       void driveRuntime.notifyBackupPending();
       router.refresh();
-    } catch {
+    } catch (error) {
       setReviewOverride(selectedVersion.id, previousReviewState);
+
+      if (error instanceof ApiRequestError && error.status === 409) {
+        router.refresh();
+        showToast({
+          description: "Revisá la versión actual.",
+          title: "Hay una versión más nueva",
+          tone: "error",
+        });
+        return;
+      }
+
       showToast({
         description: "Intentá nuevamente.",
         title: "No pudimos guardar la revisión",
@@ -297,7 +335,7 @@ export function PieceReviewExperience({
       });
 
       if (!response.ok) {
-        throw new Error("Feedback request failed.");
+        throw new ApiRequestError(response.status);
       }
 
       const result = (await response.json()) as { feedback: PieceFeedback };
@@ -306,7 +344,18 @@ export function PieceReviewExperience({
       setDrafts((current) => ({ ...current, [draftKey]: "" }));
       void driveRuntime.notifyBackupPending();
       router.refresh();
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 409) {
+        router.refresh();
+        showToast({
+          description:
+            "Tu texto sigue acá. Revisá la versión actual antes de enviarlo.",
+          title: "Hay una versión más nueva",
+          tone: "error",
+        });
+        return;
+      }
+
       showToast({
         description: "Tu texto sigue acá. Intentá nuevamente.",
         title: "No pudimos guardar el feedback",
@@ -327,9 +376,14 @@ export function PieceReviewExperience({
     setVersionUploads((current) => ({
       ...current,
       [selectedPiece.id]: {
+        attemptToken: null,
         error,
         file,
         isUploading: false,
+        phase: file ? (error ? "invalid" : "selected") : "idle",
+        pieceVersionId: null,
+        uploaded: false,
+        versionNumber: null,
       },
     }));
   }
@@ -337,6 +391,12 @@ export function PieceReviewExperience({
   function cancelVersionUpload() {
     if (!selectedPiece) {
       return;
+    }
+
+    const currentUpload = versionUploads[selectedPiece.id];
+
+    if (currentUpload?.uploaded && currentUpload.attemptToken) {
+      void cleanupVersionUpload(selectedPiece.id, currentUpload.attemptToken);
     }
 
     setVersionUploads((current) => {
@@ -351,7 +411,7 @@ export function PieceReviewExperience({
       !selectedPiece ||
       !latestVersion ||
       !selectedUploadState.file ||
-      selectedUploadState.error ||
+      selectedUploadState.phase === "invalid" ||
       selectedUploadState.isUploading ||
       isReadOnly
     ) {
@@ -366,6 +426,7 @@ export function PieceReviewExperience({
       [selectedPiece.id]: {
         ...selectedUploadState,
         isUploading: true,
+        phase: selectedUploadState.uploaded ? "finalizing" : "preparing",
       },
     }));
 
@@ -387,43 +448,104 @@ export function PieceReviewExperience({
       return;
     }
 
-    let attemptToken: string | null = null;
+    let attemptToken = selectedUploadState.attemptToken;
+    let currentPhase: VersionUploadFlowPhase = selectedUploadState.uploaded
+      ? "finalize"
+      : "prepare";
+    let activePieceVersionId = selectedUploadState.pieceVersionId;
+    let activeVersionNumber = selectedUploadState.versionNumber;
+    let activeUploaded = selectedUploadState.uploaded;
 
     try {
-      const prepareResponse = await fetch(
-        `/api/pieces/${selectedPiece.id}/versions/prepare`,
-        {
-          body: JSON.stringify({
-            fileSizeBytes: file.size,
-            filename: file.name,
-            mimeType: file.type,
-          }),
-          headers: {
-            "Content-Type": "application/json",
+      let prepared: PrepareVersionResponse | null =
+        selectedUploadState.attemptToken &&
+        selectedUploadState.pieceVersionId &&
+        selectedUploadState.versionNumber
+          ? {
+              attemptToken: selectedUploadState.attemptToken,
+              pieceVersionId: selectedUploadState.pieceVersionId,
+              uploadUrl: "",
+              versionNumber: selectedUploadState.versionNumber,
+            }
+          : null;
+
+      if (!prepared) {
+        const prepareResponse = await fetch(
+          `/api/pieces/${selectedPiece.id}/versions/prepare`,
+          {
+            body: JSON.stringify({
+              fileSizeBytes: file.size,
+              filename: file.name,
+              mimeType: file.type,
+            }),
+            headers: {
+              "Content-Type": "application/json",
+            },
+            method: "POST",
           },
-          method: "POST",
-        },
-      );
+        );
 
-      if (!prepareResponse.ok) {
-        throw new Error("Prepare version request failed.");
+        if (!prepareResponse.ok) {
+          throw new VersionUploadFlowError("prepare", prepareResponse.status);
+        }
+
+        prepared = (await prepareResponse.json()) as PrepareVersionResponse;
+        attemptToken = prepared.attemptToken;
+        activePieceVersionId = prepared.pieceVersionId;
+        activeVersionNumber = prepared.versionNumber;
+
+        setVersionUploads((current) => ({
+          ...current,
+          [selectedPiece.id]: {
+            ...selectedUploadState,
+            attemptToken,
+            error: null,
+            isUploading: true,
+            phase: "uploading",
+            pieceVersionId: activePieceVersionId,
+            uploaded: false,
+            versionNumber: activeVersionNumber,
+          },
+        }));
       }
 
-      const prepared = (await prepareResponse.json()) as PrepareVersionResponse;
-      attemptToken = prepared.attemptToken;
-
-      const uploadResponse = await fetch(prepared.uploadUrl, {
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-        method: "PUT",
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("R2 upload failed.");
+      if (!prepared) {
+        throw new VersionUploadFlowError("prepare");
       }
 
+      if (!selectedUploadState.uploaded) {
+        currentPhase = "upload";
+        const uploadResponse = await fetch(prepared.uploadUrl, {
+          body: file,
+          headers: {
+            "Content-Type": file.type,
+          },
+          method: "PUT",
+        });
+
+        if (!uploadResponse.ok) {
+          throw new VersionUploadFlowError("upload", uploadResponse.status);
+        }
+
+        activeUploaded = true;
+        currentPhase = "finalize";
+        setVersionUploads((current) => ({
+          ...current,
+          [selectedPiece.id]: {
+            ...selectedUploadState,
+            attemptToken: prepared.attemptToken,
+            error: null,
+            file,
+            isUploading: true,
+            phase: "finalizing",
+            pieceVersionId: prepared.pieceVersionId,
+            uploaded: true,
+            versionNumber: prepared.versionNumber,
+          },
+        }));
+      }
+
+      currentPhase = "finalize";
       const finalizeResponse = await fetch(
         `/api/pieces/${selectedPiece.id}/versions/finalize`,
         {
@@ -438,7 +560,7 @@ export function PieceReviewExperience({
       );
 
       if (!finalizeResponse.ok) {
-        throw new Error("Finalize version request failed.");
+        throw new VersionUploadFlowError("finalize", finalizeResponse.status);
       }
 
       const finalized = (await finalizeResponse.json()) as FinalizeVersionResponse;
@@ -458,9 +580,53 @@ export function PieceReviewExperience({
       void driveRuntime.notifyBackupPending();
       router.refresh();
       navigateToVersion(selectedPiece.id, finalized.versionNumber);
-    } catch {
-      if (attemptToken) {
+    } catch (error) {
+      const uploadError =
+        error instanceof VersionUploadFlowError
+          ? error
+          : new VersionUploadFlowError(currentPhase);
+
+      if (
+        uploadError.phase === "upload" &&
+        attemptToken
+      ) {
         void cleanupVersionUpload(selectedPiece.id, attemptToken);
+      }
+
+      if (uploadError.phase === "finalize") {
+        const resolution = resolveFinalizeFailure({
+          status: uploadError.status,
+        });
+
+        setVersionUploads((current) => ({
+          ...current,
+          [selectedPiece.id]: {
+            ...selectedUploadState,
+            attemptToken: resolution.discardAttempt ? null : attemptToken,
+            error: resolution.description,
+            file,
+            isUploading: false,
+            phase: resolution.discardAttempt ? "selected" : "finalize-error",
+            pieceVersionId: resolution.discardAttempt
+              ? null
+              : activePieceVersionId,
+            uploaded: resolution.discardAttempt ? false : activeUploaded,
+            versionNumber: resolution.discardAttempt
+              ? null
+              : activeVersionNumber,
+          },
+        }));
+        showToast({
+          description: resolution.description,
+          title: resolution.title,
+          tone: "error",
+        });
+
+        if (uploadError.status === 409) {
+          router.refresh();
+        }
+
+        return;
       }
 
       setVersionUploads((current) => ({
@@ -469,6 +635,11 @@ export function PieceReviewExperience({
           error: "No pudimos subir la versión. Intentá nuevamente.",
           file,
           isUploading: false,
+          attemptToken: null,
+          phase: "selected",
+          pieceVersionId: null,
+          uploaded: false,
+          versionNumber: null,
         },
       }));
       showToast({
@@ -539,10 +710,27 @@ export function PieceReviewExperience({
   }
 
   function prependLocalVersion(pieceId: string, version: PieceVersion) {
-    setLocalVersions((current) => ({
-      ...current,
-      [pieceId]: [version, ...(current[pieceId] ?? [])],
-    }));
+    const persistedVersions =
+      pieces.find((piece) => piece.id === pieceId)?.versions ?? [];
+
+    setLocalVersions((current) => {
+      const optimisticVersionIdsToDrop = new Set(
+        getOptimisticVersionIdsToDrop(
+          persistedVersions,
+          current[pieceId] ?? [],
+        ),
+      );
+
+      return {
+        ...current,
+        [pieceId]: [
+          version,
+          ...(current[pieceId] ?? []).filter(
+            (localVersion) => !optimisticVersionIdsToDrop.has(localVersion.id),
+          ),
+        ],
+      };
+    });
   }
 }
 
@@ -633,4 +821,21 @@ function mergeFeedback(
 
     return true;
   });
+}
+
+class ApiRequestError extends Error {
+  constructor(public readonly status: number) {
+    super("API request failed.");
+    this.name = "ApiRequestError";
+  }
+}
+
+class VersionUploadFlowError extends Error {
+  constructor(
+    public readonly phase: VersionUploadFlowPhase,
+    public readonly status?: number,
+  ) {
+    super("Version upload flow failed.");
+    this.name = "VersionUploadFlowError";
+  }
 }
