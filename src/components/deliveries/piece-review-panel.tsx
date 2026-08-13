@@ -14,6 +14,7 @@ type ReviewState = Piece["reviewState"];
 type PieceReviewPanelProps = {
   draft: string;
   isVisualReviewMode: boolean;
+  isMobileLayout?: boolean;
   onDraftChange: (value: string) => void;
   onReviewStateChange: (reviewState: ReviewState) => void;
   onVersionSelect: (versionNumber: number) => void;
@@ -25,6 +26,7 @@ type PieceReviewPanelProps = {
 export function PieceReviewPanel({
   draft,
   isVisualReviewMode,
+  isMobileLayout = false,
   onDraftChange,
   onReviewStateChange,
   onVersionSelect,
@@ -35,8 +37,10 @@ export function PieceReviewPanel({
   const state = getReviewStatePresentation(reviewState);
 
   return (
-    <aside className="flex min-h-0 flex-col border-l border-border bg-surface">
-      <div className="border-b border-border p-4">
+    <aside
+      className={`flex min-h-0 min-w-0 flex-col bg-surface ${isMobileLayout ? "" : "h-full border-l border-border"}`}
+    >
+      <div className={isMobileLayout ? "hidden" : "border-b border-border p-4"}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-medium text-muted-foreground">
@@ -61,8 +65,14 @@ export function PieceReviewPanel({
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
-        <section>
+      <div
+        className={`min-h-0 flex-1 space-y-5 overflow-y-auto p-4 ${
+          isMobileLayout
+            ? "pb-[calc(5.75rem+env(safe-area-inset-bottom))]"
+            : ""
+        }`}
+      >
+        <section className={isMobileLayout ? "hidden" : ""}>
           <p className="text-sm font-semibold text-foreground">Revisión</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Button
@@ -113,7 +123,7 @@ export function PieceReviewPanel({
             <div className="mt-3 space-y-2">
               {selectedVersion.feedback.map((item) => (
                 <article
-                  className="rounded-[8px] border border-border bg-surface-muted/25 p-3"
+                  className="min-w-0 rounded-[8px] border border-border bg-surface-muted/25 p-3"
                   key={item.id}
                 >
                   <div className="flex items-center justify-between gap-2 text-xs">
@@ -124,7 +134,7 @@ export function PieceReviewPanel({
                       {item.createdAtLabel}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  <p className="mt-1 break-words text-sm leading-6 text-muted-foreground">
                     {item.body}
                   </p>
                 </article>
@@ -145,7 +155,7 @@ export function PieceReviewPanel({
               value={draft}
             />
             <button
-              className="mt-2 inline-flex h-8 items-center rounded-[8px] border border-border bg-surface px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface-muted disabled:pointer-events-none disabled:opacity-50"
+              className="mt-2 inline-flex min-h-10 items-center rounded-[8px] border border-border bg-surface px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface-muted disabled:pointer-events-none disabled:opacity-50 md:min-h-8"
               disabled={!isVisualReviewMode}
               type="button"
             >
@@ -185,7 +195,7 @@ export function PieceReviewPanel({
           <div className="mt-3 space-y-1">
             {piece.versions.map((version) => (
               <button
-                className={`flex w-full items-center justify-between rounded-[8px] border px-3 py-2 text-left text-sm transition-colors ${
+                className={`flex min-h-11 w-full items-center justify-between rounded-[8px] border px-3 py-2 text-left text-sm transition-colors md:min-h-0 ${
                   version.versionNumber === selectedVersion.versionNumber
                     ? "border-subtle-foreground bg-surface-muted/40 text-foreground"
                     : "border-border bg-surface text-muted-foreground hover:bg-surface-muted/30"
@@ -227,7 +237,7 @@ export function PieceReviewPanel({
                       {item.createdAtLabel}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  <p className="mt-1 break-words text-sm leading-6 text-muted-foreground">
                     {item.body}
                   </p>
                 </article>
@@ -240,6 +250,41 @@ export function PieceReviewPanel({
           )}
         </section>
       </div>
+
+      {isMobileLayout ? (
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-surface/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+          <div className="mx-auto grid max-w-md grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+            <Button
+              className={
+                reviewState === "OK"
+                  ? "min-h-11 px-2 text-[13px] border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-50"
+                  : "min-h-11 px-2 text-[13px]"
+              }
+              disabled={!isVisualReviewMode}
+              onClick={() => onReviewStateChange("OK")}
+              size="md"
+              variant="secondary"
+            >
+              <Check className="mr-1.5 size-4" strokeWidth={1.8} />
+              OK
+            </Button>
+            <Button
+              className={
+                reviewState === "NEEDS_CHANGES"
+                  ? "min-h-11 px-2 text-[13px] border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-50"
+                  : "min-h-11 px-2 text-[13px]"
+              }
+              disabled={!isVisualReviewMode}
+              onClick={() => onReviewStateChange("NEEDS_CHANGES")}
+              size="md"
+              variant="secondary"
+            >
+              <RotateCcw className="mr-1.5 size-4" strokeWidth={1.8} />
+              Necesita cambios
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

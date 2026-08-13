@@ -23,8 +23,8 @@ export default async function Home() {
         action={<ButtonLink href="/deliveries/new">Subir entrega</ButtonLink>}
       />
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="space-y-5">
+      <section className="mt-4 grid gap-4 xl:mt-5 xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-5">
+        <div className="space-y-4 xl:space-y-5">
           <Surface
             action={
               <ButtonLink href="/deliveries" size="sm" variant="tertiary">
@@ -62,7 +62,7 @@ export default async function Home() {
           </Surface>
         </div>
 
-        <aside>
+        <aside className="order-last">
           <Surface compact title="Aprendizajes">
             <div className="space-y-3">
               <div className="inline-flex items-center gap-1.5 rounded-[7px] border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-medium text-violet-700">

@@ -35,7 +35,7 @@ export default async function DeliveryDetailPage({
         action={<Badge tone={delivery.statusTone}>{delivery.statusLabel}</Badge>}
       />
 
-      <section className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_260px]">
+      <section className="mt-4 grid gap-4 xl:mt-6 xl:grid-cols-[minmax(0,1fr)_260px] xl:gap-5">
         <Surface contentClassName="p-0" title="Piezas">
           <Suspense
             fallback={
@@ -51,30 +51,30 @@ export default async function DeliveryDetailPage({
           </Suspense>
         </Surface>
 
-        <aside className="space-y-3">
+        <aside className="-order-1 space-y-3 xl:order-none">
           <Surface compact title="Resumen">
             <dl className="space-y-3 text-sm">
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Tipo</dt>
-                <dd className="font-medium text-foreground">
+                <dd className="min-w-0 text-right font-medium text-foreground">
                   {delivery.typeLabel}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Piezas</dt>
-                <dd className="font-medium text-foreground">
+                <dd className="min-w-0 text-right font-medium text-foreground">
                   {delivery.pieceCountLabel}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Fecha</dt>
-                <dd className="font-medium text-foreground">
+                <dd className="min-w-0 text-right font-medium text-foreground">
                   {delivery.dateLabel}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Autor</dt>
-                <dd className="font-medium text-foreground">
+                <dd className="min-w-0 text-right font-medium text-foreground">
                   {delivery.authorLabel}
                 </dd>
               </div>

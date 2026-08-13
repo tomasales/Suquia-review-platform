@@ -16,10 +16,10 @@ export function PiecePreview({
   const frame =
     aspect === "story"
       ? mode === "modal"
-        ? "h-full max-h-[76vh] aspect-[9/16]"
+        ? "h-full max-h-full aspect-[9/16] md:max-h-[76vh]"
         : "aspect-[9/16]"
       : mode === "modal"
-        ? "h-[72vh] max-h-[680px] aspect-square max-w-full"
+        ? "h-full max-h-full aspect-square max-w-full md:h-[72vh] md:max-h-[680px]"
         : "aspect-square";
 
   const base =

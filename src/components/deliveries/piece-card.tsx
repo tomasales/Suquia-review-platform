@@ -18,7 +18,7 @@ export function PieceCard({ onOpen, piece, reviewState }: PieceCardProps) {
   return (
     <button
       aria-label={`Abrir pieza ${piece.position}`}
-      className="group rounded-[var(--radius)] border border-border bg-surface p-2 text-left transition-colors hover:border-subtle-foreground hover:bg-surface-muted/30 focus:outline-none focus:ring-2 focus:ring-foreground/20"
+      className="group min-w-0 rounded-[var(--radius)] border border-border bg-surface p-1.5 text-left transition-colors hover:border-subtle-foreground hover:bg-surface-muted/30 focus:outline-none focus:ring-2 focus:ring-foreground/20 sm:p-2"
       onClick={onOpen}
       type="button"
     >
@@ -34,7 +34,7 @@ export function PieceCard({ onOpen, piece, reviewState }: PieceCardProps) {
       </div>
       <div className="mt-2 space-y-1">
         <div className="flex items-center justify-between gap-2">
-          <p className="whitespace-nowrap text-[13px] font-semibold text-foreground">
+          <p className="min-w-0 truncate text-[13px] font-semibold text-foreground">
             Pieza {piece.position}
           </p>
           <p className="whitespace-nowrap text-xs text-muted-foreground">
@@ -42,7 +42,7 @@ export function PieceCard({ onOpen, piece, reviewState }: PieceCardProps) {
           </p>
         </div>
         <span
-          className={`inline-flex max-w-full items-center rounded-[6px] border px-1.5 py-0.5 text-[10px] font-medium leading-4 ${state.badge}`}
+          className={`inline-flex max-w-full items-center whitespace-normal rounded-[6px] border px-1.5 py-0.5 text-[10px] font-medium leading-4 ${state.badge}`}
         >
           {state.label}
         </span>

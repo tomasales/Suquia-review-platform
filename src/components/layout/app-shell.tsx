@@ -18,7 +18,7 @@ export function AppShell({ children, user }: AppShellProps) {
       <AppSidebar />
       <div className="min-h-screen lg:pl-[var(--sidebar-width)]">
         <AppHeader user={user} />
-        <main className="px-4 py-5 sm:px-6 lg:px-8">{children}</main>
+        <main className="px-3 py-4 sm:px-6 lg:px-8 lg:py-5">{children}</main>
       </div>
     </div>
   );

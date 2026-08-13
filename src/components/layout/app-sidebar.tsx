@@ -1,29 +1,14 @@
 "use client";
 
-import {
-  ArchiveRestore,
-  BookOpen,
-  Clock3,
-  FileStack,
-  LayoutDashboard,
-  Settings,
-} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const primaryNav = [
-  { label: "Dashboard", icon: LayoutDashboard, href: "/" },
-  { label: "Entregas", icon: FileStack, href: "/deliveries" },
-  { label: "Guidelines / Knowledge", icon: BookOpen, href: "#" },
-  { label: "Journal", icon: Clock3, href: "#" },
-];
-
-const secondaryNav = [
-  { label: "Configuración", icon: Settings, href: "#" },
-];
+import { isNavActive, primaryNav, utilityNav } from "./navigation";
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const driveNavItem = utilityNav[0];
+  const DriveNavIcon = driveNavItem.icon;
 
   return (
     <aside className="hidden fixed inset-y-0 left-0 z-20 w-[var(--sidebar-width)] border-r border-border bg-surface lg:flex lg:flex-col">
@@ -38,10 +23,7 @@ export function AppSidebar() {
 
       <nav className="flex-1 space-y-1 px-3 py-4">
         {primaryNav.map((item) => {
-          const isActive =
-            item.href === "/"
-              ? pathname === "/"
-              : item.href !== "#" && pathname.startsWith(item.href);
+          const isActive = isNavActive(pathname, item.href);
 
           return (
             <Link
@@ -68,14 +50,14 @@ export function AppSidebar() {
           </div>
           <Link
             className="mt-2 flex h-8 items-center gap-2 rounded-[7px] text-sm font-medium text-muted-foreground hover:text-foreground"
-            href="#"
+            href={driveNavItem.href}
           >
-            <ArchiveRestore className="size-4" strokeWidth={1.8} />
-            <span className="truncate">Recuperar desde Drive</span>
+            <DriveNavIcon className="size-4" strokeWidth={1.8} />
+            <span className="truncate">{driveNavItem.label}</span>
           </Link>
         </div>
         <nav className="space-y-1">
-          {secondaryNav.map((item) => (
+          {utilityNav.slice(1).map((item) => (
             <Link
               className="flex h-9 items-center gap-3 rounded-[8px] px-3 text-sm font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground"
               href={item.href}
