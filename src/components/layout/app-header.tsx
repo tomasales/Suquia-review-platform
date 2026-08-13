@@ -207,9 +207,6 @@ export function AppHeader({ user }: AppHeaderProps) {
               <p className="truncate text-sm font-medium text-foreground">
                 {displayName}
               </p>
-              <p className="truncate text-xs text-muted-foreground">
-                {user.email}
-              </p>
             </div>
             <button
               aria-label="Abrir menú de usuario"

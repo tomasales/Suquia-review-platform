@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "SUQUIA Review Platform",
   description: "Plataforma interna para revisión de piezas creativas de SUQUIA.",
+  formatDetection: {
+    address: false,
+    email: false,
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
