@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
 
@@ -44,67 +45,9 @@ export function AppHeader({ user }: AppHeaderProps) {
     };
   }, [isMenuOpen, isUserMenuOpen]);
 
-  return (
-    <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur">
-      <div className="flex h-14 items-center gap-3 px-4 sm:px-6 lg:px-8">
-        <button
-          aria-label="Abrir navegación"
-          className="inline-flex size-9 items-center justify-center rounded-[8px] border border-border text-muted-foreground lg:hidden"
-          onClick={() => {
-            setIsUserMenuOpen(false);
-            setIsMenuOpen(true);
-          }}
-          type="button"
-        >
-          <Menu className="size-4" />
-        </button>
-
-        <div className="lg:hidden">
-          <p className="text-sm font-semibold tracking-tight text-foreground">
-            SUQUIA
-          </p>
-        </div>
-
-        <div className="ml-auto flex items-center gap-2.5">
-          <div className="hidden min-w-0 text-right sm:block">
-            <p className="truncate text-sm font-medium text-foreground">
-              {displayName}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {user.email}
-            </p>
-          </div>
-          <button
-            aria-label="Abrir menú de usuario"
-            aria-expanded={isUserMenuOpen}
-            className="inline-flex size-10 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-foreground/20"
-            onClick={() => {
-              setIsMenuOpen(false);
-              setIsUserMenuOpen((current) => !current);
-            }}
-            type="button"
-          >
-            {user.image ? (
-              <Image
-                alt=""
-                className="size-9 rounded-full border border-border"
-                height={36}
-                src={user.image}
-                width={36}
-              />
-            ) : (
-              <span className="flex size-9 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-foreground">
-                {getInitials(user)}
-              </span>
-            )}
-          </button>
-          <div className="hidden sm:block">
-            <SignOutButton />
-          </div>
-        </div>
-      </div>
-
-      {isMenuOpen ? (
+  const menuOverlay =
+    isMenuOpen
+      ? createPortal(
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
             aria-label="Cerrar navegación"
@@ -193,10 +136,14 @@ export function AppHeader({ user }: AppHeaderProps) {
               </div>
             </div>
           </aside>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+      )
+      : null;
 
-      {isUserMenuOpen ? (
+  const userMenuOverlay =
+    isUserMenuOpen
+      ? createPortal(
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
             aria-label="Cerrar menú de usuario"
@@ -228,8 +175,74 @@ export function AppHeader({ user }: AppHeaderProps) {
               <SignOutButton />
             </div>
           </section>
+        </div>,
+        document.body,
+      )
+      : null;
+
+  return (
+    <>
+      <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur">
+        <div className="flex h-14 items-center gap-3 px-4 sm:px-6 lg:px-8">
+          <button
+            aria-label="Abrir navegación"
+            className="inline-flex size-9 items-center justify-center rounded-[8px] border border-border text-muted-foreground lg:hidden"
+            onClick={() => {
+              setIsUserMenuOpen(false);
+              setIsMenuOpen(true);
+            }}
+            type="button"
+          >
+            <Menu className="size-4" />
+          </button>
+
+          <div className="lg:hidden">
+            <p className="text-sm font-semibold tracking-tight text-foreground">
+              SUQUIA
+            </p>
+          </div>
+
+          <div className="ml-auto flex items-center gap-2.5">
+            <div className="hidden min-w-0 text-right sm:block">
+              <p className="truncate text-sm font-medium text-foreground">
+                {displayName}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {user.email}
+              </p>
+            </div>
+            <button
+              aria-label="Abrir menú de usuario"
+              aria-expanded={isUserMenuOpen}
+              className="inline-flex size-10 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-foreground/20"
+              onClick={() => {
+                setIsMenuOpen(false);
+                setIsUserMenuOpen((current) => !current);
+              }}
+              type="button"
+            >
+              {user.image ? (
+                <Image
+                  alt=""
+                  className="size-9 rounded-full border border-border"
+                  height={36}
+                  src={user.image}
+                  width={36}
+                />
+              ) : (
+                <span className="flex size-9 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-foreground">
+                  {getInitials(user)}
+                </span>
+              )}
+            </button>
+            <div className="hidden sm:block">
+              <SignOutButton />
+            </div>
+          </div>
         </div>
-      ) : null}
-    </header>
+      </header>
+      {menuOverlay}
+      {userMenuOverlay}
+    </>
   );
 }
