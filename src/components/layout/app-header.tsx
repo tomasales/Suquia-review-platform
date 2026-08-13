@@ -1,4 +1,4 @@
-import { Menu, Search } from "lucide-react";
+import { Menu } from "lucide-react";
 import Image from "next/image";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
@@ -27,7 +27,7 @@ export function AppHeader({ user }: AppHeaderProps) {
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur">
-      <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+      <div className="flex h-14 items-center gap-3 px-4 sm:px-6 lg:px-8">
         <button
           aria-label="Abrir navegación"
           className="inline-flex size-9 items-center justify-center rounded-[8px] border border-border text-muted-foreground lg:hidden"
@@ -36,14 +36,7 @@ export function AppHeader({ user }: AppHeaderProps) {
           <Menu className="size-4" />
         </button>
 
-        <div className="hidden min-w-0 flex-1 items-center sm:flex">
-          <div className="flex h-9 w-full max-w-[440px] items-center gap-2 rounded-[8px] border border-border bg-background px-3 text-muted-foreground">
-            <Search className="size-4" />
-            <span className="text-sm">Búsqueda pendiente de configurar</span>
-          </div>
-        </div>
-
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2.5">
           <div className="hidden min-w-0 text-right sm:block">
             <p className="truncate text-sm font-medium text-foreground">
               {displayName}

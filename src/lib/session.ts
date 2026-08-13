@@ -4,6 +4,10 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/auth";
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/email";
+import {
+  getVisualReviewAuthorization,
+  isVisualReviewMode,
+} from "@/lib/visual-review";
 
 type AuthorizedUser = {
   id: string;
@@ -53,6 +57,10 @@ export async function getCurrentUser() {
 }
 
 export async function getAuthorizedUser(): Promise<AuthorizationState> {
+  if (isVisualReviewMode()) {
+    return getVisualReviewAuthorization();
+  }
+
   const session = await getCurrentSession();
 
   if (!session?.user?.id) {

@@ -31,6 +31,31 @@ npm run dev
 
 La aplicación local queda disponible en `http://localhost:3000`.
 
+## Visual review local
+
+Para revisar la interfaz sin PostgreSQL ni Google OAuth configurados:
+
+```bash
+cp .env.example .env.local
+```
+
+En `.env.local`, definir:
+
+```bash
+SUQUIA_VISUAL_REVIEW=1
+```
+
+Luego:
+
+```bash
+npm install
+npm run dev
+```
+
+Abrir `http://localhost:3000`.
+
+Este modo usa un usuario ficticio y fixtures in-memory solo en development. No persiste datos, no crea usuarios en Prisma y no debe usarse para validar lógica real.
+
 ## Organización de `/docs`
 
 - `00-product-overview.md`: visión general, problema, conceptos y principios.

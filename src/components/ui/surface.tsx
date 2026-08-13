@@ -2,17 +2,29 @@ import type { ReactNode } from "react";
 
 type SurfaceProps = {
   children: ReactNode;
+  compact?: boolean;
   title?: string;
   description?: string;
 };
 
-export function Surface({ children, title, description }: SurfaceProps) {
+export function Surface({
+  children,
+  compact = false,
+  title,
+  description,
+}: SurfaceProps) {
   return (
     <section className="rounded-[var(--radius)] border border-border bg-surface">
       {title || description ? (
-        <div className="border-b border-border px-4 py-3">
+        <div className={`border-b border-border ${compact ? "px-3 py-2.5" : "px-4 py-3"}`}>
           {title ? (
-            <h2 className="text-base font-semibold tracking-tight text-foreground">
+            <h2
+              className={
+                compact
+                  ? "text-sm font-semibold text-foreground"
+                  : "text-base font-semibold tracking-tight text-foreground"
+              }
+            >
               {title}
             </h2>
           ) : null}
@@ -21,7 +33,7 @@ export function Surface({ children, title, description }: SurfaceProps) {
           ) : null}
         </div>
       ) : null}
-      <div className="p-4">{children}</div>
+      <div className={compact ? "p-3" : "p-4"}>{children}</div>
     </section>
   );
 }

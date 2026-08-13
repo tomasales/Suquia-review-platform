@@ -5,7 +5,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
 import { DeliveryTable } from "@/components/ui/delivery-table";
-import { Surface } from "@/components/ui/surface";
 import {
   listDeliveries,
   listDeliveryAuthors,
@@ -41,16 +40,15 @@ export default async function DeliveriesPage({
         action={<ButtonLink href="/deliveries/new">Subir entrega</ButtonLink>}
       />
 
-      <section className="mt-6">
-        <Surface>
+      <section className="mt-5">
           <form
             action="/deliveries"
-            className="grid gap-3 border-b border-border pb-4 md:grid-cols-5"
+            className="grid items-end gap-2 border-b border-border pb-3 md:grid-cols-[minmax(120px,0.9fr)_minmax(160px,1fr)_minmax(160px,1fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)_auto]"
           >
-            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+            <label className="space-y-1 text-[11px] font-medium text-muted-foreground">
               <span>Tipo</span>
               <select
-                className="h-9 w-full rounded-[8px] border border-border bg-background px-2 text-sm text-foreground"
+                className="h-8 w-full rounded-[8px] border border-border bg-surface px-2 text-sm text-foreground"
                 defaultValue={filters.values.type}
                 name="type"
               >
@@ -63,10 +61,10 @@ export default async function DeliveriesPage({
               </select>
             </label>
 
-            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+            <label className="space-y-1 text-[11px] font-medium text-muted-foreground">
               <span>Estado</span>
               <select
-                className="h-9 w-full rounded-[8px] border border-border bg-background px-2 text-sm text-foreground"
+                className="h-8 w-full rounded-[8px] border border-border bg-surface px-2 text-sm text-foreground"
                 defaultValue={filters.values.status}
                 name="status"
               >
@@ -79,10 +77,10 @@ export default async function DeliveriesPage({
               </select>
             </label>
 
-            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+            <label className="space-y-1 text-[11px] font-medium text-muted-foreground">
               <span>Autor</span>
               <select
-                className="h-9 w-full rounded-[8px] border border-border bg-background px-2 text-sm text-foreground"
+                className="h-8 w-full rounded-[8px] border border-border bg-surface px-2 text-sm text-foreground"
                 defaultValue={filters.values.author}
                 name="author"
               >
@@ -95,39 +93,39 @@ export default async function DeliveriesPage({
               </select>
             </label>
 
-            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+            <label className="space-y-1 text-[11px] font-medium text-muted-foreground">
               <span>Desde</span>
               <input
-                className="h-9 w-full rounded-[8px] border border-border bg-background px-2 text-sm text-foreground"
+                className="h-8 w-full rounded-[8px] border border-border bg-surface px-2 text-sm text-foreground"
                 defaultValue={filters.values.from}
                 name="from"
                 type="date"
               />
             </label>
 
-            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+            <label className="space-y-1 text-[11px] font-medium text-muted-foreground">
               <span>Hasta</span>
               <input
-                className="h-9 w-full rounded-[8px] border border-border bg-background px-2 text-sm text-foreground"
+                className="h-8 w-full rounded-[8px] border border-border bg-surface px-2 text-sm text-foreground"
                 defaultValue={filters.values.to}
                 name="to"
                 type="date"
               />
             </label>
 
-            <div className="flex items-end gap-2 md:col-span-5">
-              <Button size="sm" type="submit">
-                Aplicar filtros
+            <div className="flex gap-2">
+              <Button size="sm" type="submit" variant="secondary">
+                Aplicar
               </Button>
               {filters.isActive ? (
                 <ButtonLink href="/deliveries" size="sm" variant="secondary">
-                  Limpiar filtros
+                  Limpiar
                 </ButtonLink>
               ) : null}
             </div>
           </form>
 
-          <div className="pt-4">
+          <div className="pt-2">
             {deliveries.length > 0 ? (
               <DeliveryTable deliveries={deliveries} />
             ) : filters.isActive ? (
@@ -157,7 +155,6 @@ export default async function DeliveriesPage({
               </div>
             )}
           </div>
-        </Surface>
       </section>
     </AppShell>
   );

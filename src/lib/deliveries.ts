@@ -10,6 +10,11 @@ import {
   formatReviewSummary,
   pieceReviewStateLabel,
 } from "@/lib/delivery-presentation";
+import {
+  visualReviewAuthors,
+  visualReviewDeliveries,
+} from "@/lib/visual-review-data";
+import { isVisualReviewMode } from "@/lib/visual-review";
 
 export const reviewQueueStatuses = [
   DeliveryStatus.SENT_FOR_REVIEW,
@@ -95,11 +100,11 @@ const deliveryDetailSelect = {
   },
 } satisfies Prisma.DeliverySelect;
 
-type DeliveryListRecord = Prisma.DeliveryGetPayload<{
+export type DeliveryListRecord = Prisma.DeliveryGetPayload<{
   select: typeof deliveryListSelect;
 }>;
 
-type DeliveryDetailRecord = Prisma.DeliveryGetPayload<{
+export type DeliveryDetailRecord = Prisma.DeliveryGetPayload<{
   select: typeof deliveryDetailSelect;
 }>;
 
@@ -142,6 +147,15 @@ export async function listDeliveries(
     take?: number;
   } = {},
 ) {
+  if (isVisualReviewMode()) {
+    return visualReviewDeliveries
+      .filter((delivery) =>
+        matchesVisualReviewFilters(delivery, filters, options.statuses),
+      )
+      .slice(0, options.take)
+      .map(toDeliveryListItem);
+  }
+
   const where = buildDeliveryWhere(filters, options.statuses);
 
   const deliveries = await db.delivery.findMany({
@@ -158,6 +172,12 @@ export async function listDeliveries(
 }
 
 export async function getDeliveryById(id: string) {
+  if (isVisualReviewMode()) {
+    const delivery = visualReviewDeliveries.find((item) => item.id === id);
+
+    return delivery ? toDeliveryDetail(delivery) : null;
+  }
+
   const delivery = await db.delivery.findFirst({
     where: {
       id,
@@ -174,6 +194,10 @@ export async function getDeliveryById(id: string) {
 }
 
 export async function listDeliveryAuthors() {
+  if (isVisualReviewMode()) {
+    return visualReviewAuthors;
+  }
+
   return db.user.findMany({
     where: {
       createdDeliveries: {
@@ -189,6 +213,23 @@ export async function listDeliveryAuthors() {
       email: true,
     },
   });
+}
+
+function matchesVisualReviewFilters(
+  delivery: DeliveryDetailRecord,
+  filters: DeliveryFilters,
+  statuses?: readonly DeliveryStatus[],
+) {
+  const effectiveDate = delivery.submittedAt ?? delivery.createdAt;
+
+  return (
+    (!filters.type || delivery.type === filters.type) &&
+    (!filters.status || delivery.status === filters.status) &&
+    (!statuses?.length || statuses.includes(delivery.status)) &&
+    (!filters.authorId || delivery.creator.id === filters.authorId) &&
+    (!filters.from || effectiveDate >= filters.from) &&
+    (!filters.to || effectiveDate <= filters.to)
+  );
 }
 
 function buildDeliveryWhere(
