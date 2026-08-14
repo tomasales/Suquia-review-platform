@@ -15,23 +15,73 @@ Este archivo contiene la única tarea operativa que Codex debe ejecutar después
 
 ---
 
-# Tarea actual — Referencias visuales adjuntas al feedback
+# Tarea actual — Hardening de retry/idempotencia de referencias de feedback
 
-Quiero completar el feedback de Piece permitiendo adjuntar una o varias imágenes de referencia.
+La implementación de referencias visuales quedó funcional, pero la revisión posterior detectó dos problemas de consistencia que hay que corregir antes de avanzar a ConversationReply u otras features.
 
-Ya existe:
+Commit base relevante:
 
-- feedback de texto real ligado a `PieceVersion`;
-- `FeedbackAttachment` en Prisma;
-- R2 privado con signed PUT/GET;
-- receipts HMAC para uploads;
-- versionado V1/V2;
-- locks `Delivery → Piece`;
-- Drive backup incremental;
-- UI con botón `Adjuntar referencia` actualmente deshabilitado;
-- sección visual `Referencias` en el modal.
+`61275166 · feat: add feedback reference attachments`
 
-La referencia visual debe ser un attachment REAL de un `Feedback`, no una entidad paralela.
+## Problemas detectados
+
+### A. El finalize no es idempotente frente a cambios posteriores
+
+Hoy `addPieceFeedbackInTransaction()` valida primero:
+
+- Delivery abierta;
+- `pieceVersionId` sigue siendo latest;
+
+y recién después busca si `feedbackId` ya existe.
+
+Eso rompe este escenario:
+
+```text
+1. finalize sobre V1 hace commit correctamente
+2. la respuesta al browser se pierde
+3. aparece V2 o se cierra la Delivery
+4. browser reintenta el MISMO finalize
+5. backend responde HISTORICAL_VERSION / DELIVERY_CLOSED
+```
+
+Pero ese Feedback YA fue creado correctamente en el primer intento.
+
+El retry debe devolver success idempotente, no reinterpretar una operación ya confirmada como una nueva mutation.
+
+Además el endpoint hace HEAD de R2 antes de comprobar si el Feedback ya existe. Un retry de una operación ya commiteada no debería depender de volver a verificar R2 para reconocer el success previo.
+
+### B. El composer puede mutar un attempt ya subido
+
+Después de un error recuperable de finalize:
+
+- `attemptToken` queda preservado;
+- los objetos ya están en R2;
+- `phase = finalize-error`;
+
+pero actualmente:
+
+- el CTA vuelve a mostrar `Enviar feedback` en lugar de `Reintentar` porque `isFeedbackSubmitting` ya es false;
+- el usuario puede agregar referencias nuevas;
+- puede quitar referencias;
+- puede editar el texto.
+
+Eso es inconsistente porque el receipt ya firmó un set específico de attachments.
+
+Ejemplo peligroso:
+
+```text
+prepare A+B
+→ upload A+B
+→ finalize 500
+→ usuario agrega C
+→ click submit
+→ retry usa receipt A+B
+→ C nunca se sube
+```
+
+No puede ocurrir.
+
+---
 
 ## No hacer
 
@@ -39,915 +89,394 @@ La referencia visual debe ser un attachment REAL de un `Feedback`, no una entida
 - NO implementar feedback general de Delivery.
 - NO implementar AI Memory/jobs.
 - NO implementar Direction.
-- NO implementar restore/delete/search.
-- NO agregar pins/coordenadas sobre imágenes.
+- NO cambiar Prisma schema.
+- NO rediseñar el modal.
+- NO cambiar arquitectura Drive.
+- NO cambiar límites/MIME de referencias.
 - NO cambiar reglas de review/status.
-- NO hacer bucket público.
-- NO crear una segunda tabla de “Reference”.
 
-## Releer
+## Releer especialmente
 
-- `docs/03-pieces-and-versions.md`
 - `docs/04-feedback.md`
-- `docs/05-journal.md`
-- `docs/08-google-drive.md`
 - `docs/09-errors-and-recovery.md`
-- `docs/13-open-decisions.md`
-- `docs/15-data-model.md`
 - `docs/16-drive-sync-architecture.md`
-
-Código relevante:
-
-- `prisma/schema.prisma`
 - `src/lib/piece-review-actions.ts`
-- `src/lib/piece-review-rules.ts`
+- `src/app/api/pieces/[pieceId]/feedback/attachments/finalize/route.ts`
+- `src/app/api/pieces/[pieceId]/feedback/attachments/cleanup-upload/route.ts`
 - `src/components/deliveries/piece-review-experience.tsx`
 - `src/components/deliveries/piece-review-panel.tsx`
-- `src/lib/deliveries.ts`
-- `src/lib/delivery-upload-receipt.ts`
-- `src/lib/storage/*`
-- `src/lib/drive/backup-snapshot.ts`
-- `src/lib/drive/backup-format.ts`
-- `src/lib/drive/processor.ts`
+- `src/components/deliveries/piece-version-client-state.ts`
+- tests actuales de feedback attachments
 
 ---
 
-## 1. Decisión funcional
+# Parte 1 — Idempotencia server correcta
 
-Un Feedback de Piece puede tener:
+## 1. Regla definitiva
 
-- texto obligatorio;
-- cero, una o varias imágenes de referencia.
+Si un receipt válido se reintenta y `receipt.feedbackId` YA existe en PostgreSQL, el servidor debe tratarlo como una operación potencialmente ya finalizada.
 
-El texto sigue siendo obligatorio en MVP.
+Si el Feedback existente coincide con el receipt y request esperado:
 
-No permitir “feedback vacío con solo imágenes” todavía.
+- mismo `feedbackId`;
+- mismo `deliveryId`;
+- mismo `pieceId`;
+- mismo `pieceVersionId`;
+- mismo `authorUserId`;
+- mismo `sourceType` derivado del user;
+- mismo body normalizado;
+- mismos attachment IDs;
+- misma metadata estructural de attachments (`storageKey`, MIME, size, filename, uploader);
 
-Las referencias pertenecen al Feedback concreto y, por transitividad, a la `PieceVersion` donde ese feedback fue creado.
+responder SUCCESS idempotente.
 
-Una referencia histórica sigue visible cuando se navega una versión anterior.
+No crear:
 
-Solo la latest `PieceVersion` acepta feedback nuevo, igual que hoy.
+- segundo Feedback;
+- nuevos FeedbackAttachment;
+- Journal nuevo;
+- SyncOperation/Drive enqueue nuevo;
+- cambio nuevo de Delivery.status.
 
----
+## 2. Idempotencia gana sobre estado mutable posterior
 
-## 2. Modelo
+Si el Feedback ya existe y coincide:
 
-Usar el modelo existente:
+el retry debe devolver success aunque DESPUÉS del primer commit:
 
-`FeedbackAttachment`
+- haya aparecido V2;
+- la versión original ahora sea histórica;
+- la Delivery haya pasado a CLOSED.
 
-No crear migration si el schema actual alcanza.
+No estamos autorizando una mutation histórica nueva.
 
-Campos actuales relevantes:
+Estamos reconociendo que la mutation YA ocurrió.
 
-- id;
-- feedbackId;
-- uploadedByUserId;
-- originalFilename;
-- mimeType;
-- fileSizeBytes;
-- storageKey;
-- driveFileId;
-- createdAt.
+## 3. No saltarse validaciones para creación nueva
 
-Si el schema actual alcanza, NO tocar Prisma.
+Si `feedbackId` NO existe:
 
----
-
-## 3. Tipos permitidos
-
-Referencias MVP:
-
-- image/jpeg
-- image/png
-- image/webp
-
-Máximo:
-
-- 25 MB por archivo;
-- hard cap técnico de 10 imágenes por Feedback.
-
-Validar cliente y servidor.
-
-No PDF/video/GIF en este bloque.
-
----
-
-## 4. Arquitectura de upload
-
-Mantener patrón seguro:
-
-PREPARE
-→ browser PUT directo a R2
-→ FINALIZE
-
-No mandar binaries por Next server.
-
-Cuando no hay referencias, conservar el endpoint/text-flow actual sin obligar a hacer prepare.
-
-Cuando hay referencias seleccionadas, usar un flujo específico con receipt firmado.
-
----
-
-## 5. Prepare attachments
-
-Crear endpoint protegido, nombre sugerido:
-
-`POST /api/pieces/[pieceId]/feedback/attachments/prepare`
-
-Input:
-
-```json
-{
-  "pieceVersionId": "...",
-  "attachments": [
-    {
-      "filename": "ref.jpg",
-      "mimeType": "image/jpeg",
-      "fileSizeBytes": 12345
-    }
-  ]
-}
-```
-
-Server:
-
-1. usuario autorizado;
-2. Piece existe y Delivery no está eliminada;
-3. Delivery no CLOSED;
-4. `pieceVersionId` pertenece a Piece y es latest en ese momento;
-5. 1..10 attachments;
-6. validar MIME/tamaño;
-7. generar `feedbackId = crypto.randomUUID()`;
-8. generar `feedbackAttachmentId` por archivo;
-9. generar storage keys definitivas;
-10. generar signed PUT URLs;
-11. devolver receipt firmado.
-
-La validación de latest en PREPARE es optimización UX, NO autoridad final. FINALIZE debe revalidar bajo locks.
-
----
-
-## 6. Receipt nuevo
-
-Extender la infraestructura HMAC actual con un kind específico, por ejemplo:
-
-`piece-feedback-attachments`
-
-No debe poder confundirse con:
-
-- `delivery-creation`;
-- `piece-version-upload`.
-
-Payload mínimo firmado:
-
-- kind;
-- userId;
-- deliveryId;
-- pieceId;
-- pieceVersionId;
-- feedbackId;
-- attachments[]:
-  - id;
-  - filename;
-  - mimeType;
-  - fileSizeBytes;
-  - storageKey;
-- issuedAt;
-- expiresAt.
-
-Expiry 30 min como los receipts actuales.
-
-Finalization debe comprobar expected kind.
-
----
-
-## 7. Storage keys
-
-Crear builder server-side estable.
-
-Forma conceptual:
+mantener exactamente las validaciones actuales:
 
 ```text
-deliveries/<deliveryId>/pieces/<pieceId>/v<versionNumber>/feedback/<feedbackId>/references/<attachmentId>-<filename>
+Delivery lock
+→ Piece lock
+→ Piece/Delivery canónicas
+→ deletedAt
+→ CLOSED
+→ latest PieceVersion
+→ crear Feedback + attachments
+→ Journal
+→ status
+→ Drive enqueue
 ```
 
-No usar paths temporales.
+Una operación nueva sigue sin poder guardar en una versión histórica ni en Delivery cerrada.
 
-No aceptar storageKey arbitraria desde browser.
+## 4. Orden dentro de transaction
 
-Sanitizar filename igual que el resto del storage.
+Refactorizar `addPieceFeedbackInTransaction()` para separar claramente:
 
----
+A. reconocimiento idempotente de Feedback YA existente;
 
-## 8. Prepare response
+B. validaciones para crear un Feedback NUEVO.
 
-Conceptualmente:
+Después de adquirir locks y confirmar relaciones suficientes, si `feedbackId` existe:
 
-```json
-{
-  "attemptToken": "...",
-  "feedbackId": "...",
-  "attachments": [
-    {
-      "id": "...",
-      "uploadUrl": "..."
-    }
-  ]
-}
-```
+- validar que coincide con el receipt/request;
+- devolver existing success ANTES de `assertDeliveryCanBeReviewed()` y ANTES de exigir que esa versión siga siendo latest.
 
-No devolver secretos.
+Para comparar el existing usar el `pieceVersionId` del receipt/request, NO `latestVersion.id`.
 
----
+## 5. Comparar body
 
-## 9. Browser upload
+Extender `assertExistingFeedbackMatchesReceipt()` o helper equivalente para comparar también el body normalizado.
 
-Al enviar feedback con referencias:
+Motivo:
 
-1. prepare;
-2. subir attachments a R2;
-3. máximo 3 uploads concurrentes;
-4. si todos terminan → finalize.
+un retry idempotente debe representar exactamente la misma operación lógica.
 
-Durante upload:
+Si existe el mismo feedbackId pero el body no coincide:
 
-- no perder textarea;
-- no perder Files seleccionados;
-- deshabilitar submit repetido;
-- mostrar copy discreto `Subiendo referencias…`.
+- NO sobrescribir Feedback;
+- NO devolver success silencioso;
+- responder conflicto 409.
 
-No bloquear navegación general de la app.
+Puede usarse un código estable nuevo si mejora claridad, por ejemplo:
 
----
+`FEEDBACK_ATTEMPT_CONFLICT`
 
-## 10. Finalize feedback + attachments
+pero no es obligatorio si no aporta UX específica.
 
-Crear endpoint protegido sugerido:
+## 6. Fast-path antes de R2 HEAD
+
+En:
 
 `POST /api/pieces/[pieceId]/feedback/attachments/finalize`
 
-Input:
+hoy se verifican todos los R2 objects antes de saber si el Feedback ya fue finalizado.
 
-```json
-{
-  "attemptToken": "...",
-  "body": "Feedback..."
-}
-```
-
-Toda metadata estructural de attachments viene del receipt.
-
-No confiar en attachment IDs/storageKeys enviados por separado por browser.
-
----
-
-## 11. Verificación externa antes de transaction
-
-Antes de abrir DB transaction:
-
-- verify receipt;
-- usuario coincide;
-- pieceId URL coincide;
-- verificar cada R2 object con HEAD;
-- tamaño y MIME coinciden con receipt.
-
-Si un objeto no existe o no coincide:
-
-- responder error público;
-- cleanup best-effort del attempt;
-- no crear Feedback.
-
-No hacer llamadas R2 dentro de transaction DB.
-
----
-
-## 12. Transaction canónica
-
-Después de verificar R2:
+Agregar un fast-path DB seguro:
 
 ```text
-transaction
-→ lock Delivery
-→ lock Piece
-→ releer Piece/Delivery/latest PieceVersion
-→ validar receipt contra estado actual
-→ crear Feedback
-→ crear FeedbackAttachment[]
-→ posible Delivery.status actual
-→ Journal
-→ enqueue Drive
-→ commit
+verify receipt + user + pieceId URL
+→ buscar si receipt.feedbackId ya existe
+→ si existe, validar coincidencia completa
+→ success idempotente
+→ NO HEAD R2
 ```
 
-Mantener exactamente el orden de locks ya definido.
+Si NO existe:
 
----
-
-## 13. Race con V2
-
-Caso:
-
-prepare refs sobre V1
-→ archivos suben R2
-→ aparece V2
-→ finalize intenta feedback sobre V1.
-
-FINALIZE debe responder:
-
-- 409;
-- code `HISTORICAL_VERSION`.
-
-NO crear feedback retrospectivo.
-
-Hacer cleanup best-effort de los objects firmados por ese receipt.
-
-Frontend:
-
-- conserva texto y Files locales;
-- `router.refresh()`;
-- toast actual de versión más nueva;
-- NO mueve automáticamente texto ni refs a V2.
-
----
-
-## 14. CLOSED durante upload
-
-Si Delivery se cierra entre prepare y finalize:
-
-- 409 `DELIVERY_CLOSED`;
-- cleanup best-effort de refs R2;
-- no crear Feedback;
-- mantener texto/Files locales en cliente;
-- refresh;
-- toast de entrega cerrada.
-
----
-
-## 15. Idempotencia finalize
-
-El receipt contiene `feedbackId` pre-generado.
-
-Si se reintenta FINALIZE y ese Feedback ya existe:
-
-si coincide con:
-
-- same piece;
-- same pieceVersion;
-- same author;
-- attachments esperados;
-
-responder success idempotente.
-
-No crear un segundo Feedback.
-
-Esto cubre:
-
-server commit OK
-→ respuesta se pierde
-→ retry mismo attemptToken.
-
----
-
-## 16. Reutilizar lógica de feedback
-
-No duplicar reglas de negocio en dos implementaciones divergentes.
-
-Refactorizar si hace falta para que:
-
-- feedback text-only actual;
-- feedback con attachments;
-
-compartan la misma lógica canónica para:
-
-- latest version;
-- sourceType;
-- Delivery.status;
-- Journal;
-- Drive enqueue;
-- locks.
-
-Puede ampliarse `addPieceFeedback()` con opciones internas o extraer helper transaction-safe.
-
-No romper el endpoint text-only existente.
-
----
-
-## 17. sourceType
-
-Igual que hoy:
-
-`User.isAiLearningSource === true`
-→ TOMI
-
-otros
-→ OTHER
-
-No inferir DIRECTION.
-
-No crear AIProcessingJob todavía.
-
----
-
-## 18. Journal
-
-Un feedback con referencias sigue generando UN evento principal:
-
-`FEEDBACK_ADDED`
-
-Actualizar metadata para incluir, sin body:
-
-- pieceId;
-- pieceVersionId;
-- sourceType;
-- attachmentCount;
-- attachmentIds.
-
-No crear un JournalEvent por cada archivo cuando todos son parte del mismo submit.
-
-Texto del feedback no se duplica en Journal.
-
----
-
-## 19. Cleanup endpoint
-
-Crear cleanup específico por receipt, sugerido:
-
-`POST /api/pieces/[pieceId]/feedback/attachments/cleanup`
-
-Input:
-
-```json
-{ "attemptToken": "..." }
-```
-
-Server:
-
-- verify kind;
-- verify user;
-- verify pieceId;
-- si Feedback `feedbackId` ya existe → NO borrar sus objetos;
-- si no existe → borrar best-effort únicamente storageKeys firmadas.
-
-Nunca endpoint DELETE con storageKey libre.
-
----
-
-## 20. Error/retry cliente
-
-Distinguir fases mínimas:
-
-- selected;
-- preparing;
-- uploading;
-- uploaded;
-- finalizing;
-- finalize-error.
-
-Si PREPARE falla:
-
-- conservar texto + Files;
-- próximo submit vuelve a prepare.
-
-Si PUT falla:
-
-- cleanup attempt;
-- conservar texto + Files;
-- próximo submit vuelve a prepare/upload.
-
-Si FINALIZE falla por network/5xx DESPUÉS de upload:
-
-- NO cleanup;
-- conservar attemptToken;
-- conservar uploaded=true;
-- conservar texto + Files;
-- CTA `Reintentar` ejecuta SOLO finalize.
-
-Misma filosofía que upload de PieceVersion.
-
----
-
-## 21. Selector de referencias UI
-
-Activar `Adjuntar referencia` solamente cuando:
-
-- latest version;
-- Delivery no CLOSED;
-- no hay submit activo.
-
-Usar `<input type="file" multiple>`.
-
-Accept:
-
-`image/jpeg,image/png,image/webp`
-
-Agregar archivos a la selección existente en vez de reemplazarla, hasta hard cap 10.
-
-Evitar duplicados obvios por combinación:
-
-- name;
-- size;
-- lastModified.
-
----
-
-## 22. Preview antes de enviar
-
-Debajo del textarea/acciones mostrar thumbnails compactos de refs seleccionadas.
-
-Cada una debe poder eliminarse antes de submit.
-
-Mostrar filename truncado si sirve.
-
-No convertir el composer en una card gigante.
-
-Mantener UI sobria/Notion-like actual.
-
-Usar object URLs con cleanup correcto para evitar leaks.
-
----
-
-## 23. Texto obligatorio
-
-`Enviar feedback` sigue disabled si `draft.trim()` está vacío, aunque haya referencias.
-
-Las referencias complementan el feedback; no lo reemplazan.
-
----
-
-## 24. Success UI
-
-Cuando finaliza correctamente:
-
-- append optimistic del Feedback una vez;
-- incluir attachments en ese Feedback;
-- limpiar textarea;
-- limpiar selección de referencias/object URLs;
-- modal sigue abierto;
-- misma PieceVersion seleccionada;
-- `router.refresh()`;
-- `notifyBackupPending()`;
-- no auto-next.
-
-No hace falta toast de success si hoy feedback text-only tampoco lo usa.
-
----
-
-## 25. Feedback DTO
-
-Actualizar Delivery detail para que cada feedback exponga attachments:
-
-```ts
-attachments: Array<{
-  id: string;
-  originalFilename: string;
-  mimeType: string;
-  fileSizeBytes: number;
-  uploadedByLabel: string;
-  createdAtLabel: string;
-  imageSrc: string | null;
-}>
-```
-
-Generar signed GET R2 server-side.
-
-No bucket público.
-
-No mandar storageKey al cliente salvo necesidad interna demostrada.
-
----
-
-## 26. Feedback UI persistido
-
-En cada card de Feedback:
-
-- autor/fecha/body actual;
-- debajo, thumbnails de sus attachments si existen.
-
-Click/tap de una referencia debe permitir verla grande de forma simple.
-
-Preferencia MVP:
-
-- link/overlay liviano;
-- no construir editor ni galería compleja.
-
-Mobile touch-friendly.
-
----
-
-## 27. Sección `Referencias`
-
-Mantener la sección actual del modal.
-
-Pero su fuente real debe ser:
-
-attachments de todos los Feedback de la `selectedVersion`.
-
-No mantener una segunda fuente de verdad paralela.
-
-Puede derivarse en DTO o componente.
-
-Cada referencia debe conservar relación con `feedbackId` aunque la sección la muestre agregada.
-
-Visual Review fixtures deben migrar al mismo shape.
-
----
-
-## 28. Versiones históricas
-
-V1 histórica:
-
-- feedback V1 visible;
-- attachments V1 visibles;
-- sección Referencias V1 visible;
-- NO se pueden agregar nuevas refs/feedback.
-
-No mover referencias de V1 a V2.
-
----
-
-# Drive backup
-
-## 29. Snapshot
-
-Actualizar `getDeliveryBackupSnapshot()` para incluir `Feedback.attachments` con:
-
-- id;
-- feedbackId;
-- uploadedByUserId;
-- uploader;
-- originalFilename;
-- mimeType;
-- fileSizeBytes;
-- storageKey;
-- driveFileId;
-- createdAt.
-
-Orden estable:
-
-createdAt ASC, id ASC.
-
----
-
-## 30. Backup types
-
-Agregar `BackupFeedbackAttachment`.
-
-Preferencia:
-
-`BackupFeedback.attachments: BackupFeedbackAttachment[]`
-
-No usar Prisma payload como formato público.
-
----
-
-## 31. Manifest v3
-
-El manifest actual tiene schemaVersion 2 y todavía usa attachmentIds vacíos / attachments vacíos.
-
-Como ahora habrá attachments reales:
-
-bump:
-
-`schemaVersion: 3`
-
-Actualizar:
-
-`feedback[].attachmentIds`
-
-con IDs reales.
-
-Agregar top-level `attachments` con metadata suficiente para reconstrucción:
-
-- id;
-- feedbackId;
-- uploadedByUserId;
-- originalFilename;
-- mimeType;
-- fileSizeBytes;
-- driveFileId;
-- relativePath;
-- createdAt.
-
-No incluir signed URLs.
-
-No guardar secretos.
-
----
-
-## 32. feedback.jsonl
-
-Cada línea de feedback debe incluir:
-
-`attachmentIds`
-
-No duplicar metadata completa de archivos ahí.
-
-Top-level manifest contiene detalle.
-
----
-
-## 33. Drive layout refs
-
-Guardar attachments dentro de la versión a la que pertenece el Feedback.
-
-Layout sugerido:
+seguir flujo actual:
 
 ```text
-V2-<pieceVersionId>/
-  asset
-  feedback.jsonl
-  references/
-    <feedbackId>/
-      <attachmentId>-<filename>
+HEAD attachments R2
+→ DB transaction
+→ locks
+→ revalidación
+→ create
 ```
 
-Usar folders/appProperties estables, no confiar solo en nombres.
+No duplicar lógica de matching en route y action si puede extraerse un helper server-only reutilizable.
 
-Si un layout equivalente queda más limpio con helpers existentes, puede ajustarse manteniendo reconstructability.
+## 7. Carrera entre dos finalize simultáneos
 
----
+Mantener defensa dentro de transaction aunque exista fast-path fuera.
 
-## 34. Drive appProperties
+Dos requests con el mismo receipt pueden hacer ambos preflight `not found`.
 
-Para archivo attachment usar identidad estable, por ejemplo:
+Luego:
 
-```json
-{
-  "suquiaEntityType": "feedback-attachment",
-  "suquiaEntityId": "<attachmentId>",
-  "suquiaDeliveryId": "<deliveryId>",
-  "suquiaFeedbackId": "<feedbackId>",
-  "suquiaPieceVersionId": "<pieceVersionId>"
-}
+- uno crea;
+- el otro debe reconocer existing/idempotent dentro de la transaction o resolver la unique race sin crear duplicados.
+
+No confiar solo en el preflight.
+
+## 8. R2 temporalmente caído después del commit
+
+Caso esperado:
+
+```text
+finalize #1 → DB commit OK
+respuesta se pierde
+R2/HEAD temporalmente falla
+finalize #2 mismo receipt
 ```
 
-Folders de references/feedback pueden tener appProperties propias si mejora idempotencia.
+Como DB ya confirma el Feedback y attachments:
+
+finalize #2 debe poder devolver success idempotente sin requerir HEAD de nuevo.
+
+Los signed read URLs pueden quedar `null` si su generación falla; eso no convierte el commit previo en failure.
+
+## 9. Cleanup
+
+Mantener regla actual:
+
+si el Feedback ya existe, cleanup NO borra sus R2 objects.
+
+Verificar que el fast-path nuevo no introduzca una llamada accidental a cleanup.
 
 ---
 
-## 35. Processor Drive
+# Parte 2 — Composer consistente durante finalize retry
 
-En cada refresh:
+## 10. Estado de attempt recuperable
 
-- subir attachment si no está respaldado;
-- persistir `FeedbackAttachment.driveFileId`;
-- no re-subir si ya tiene Drive file válido según estrategia actual;
-- regenerar manifest;
-- regenerar feedback.jsonl;
-- Journal normal.
+Cuando ocurre network/5xx en finalize después de upload:
 
-No re-subir assets de PieceVersion innecesariamente.
+mantener:
 
-Drive falla:
+- draft;
+- referencias seleccionadas;
+- object URLs;
+- attemptToken;
+- attachmentUploads;
+- uploaded = true;
+- phase = `finalize-error`.
 
-- Feedback/attachments siguen canónicos en Postgres + R2;
-- SyncOperation FAILED;
-- retry manual posterior toma snapshot actual.
+La próxima acción principal debe ejecutar SOLAMENTE finalize con el mismo receipt.
 
----
+## 11. CTA correcto
 
-## 36. Manifest users
+Actualmente `feedbackSubmitLabel` solo muestra `Reintentar` si `isFeedbackSubmitting` es true, pero después del catch vuelve a false.
 
-`collectManifestUsers()` debe incluir uploader de FeedbackAttachment si no estaba incluido por otro rol.
+Corregir.
 
-No duplicar users.
+Si:
 
----
+`feedbackAttachmentUpload.phase === "finalize-error"`
 
-## 37. R2/Drive cleanup
+y existe attempt uploaded,
 
-No borrar attachments R2 después de haber creado Feedback.
+el CTA principal debe mostrar:
 
-No implementar delete de attachments persistidos en este bloque.
+`Reintentar`
 
-Solo cleanup de attempts que NO llegaron a Feedback canónico.
+incluso cuando no hay request en curso.
 
----
+Al click:
 
-## 38. Visual Review
+- NO prepare nuevo;
+- NO PUT nuevo;
+- solo finalize.
 
-Debe seguir sin DB/R2/Drive real.
+## 12. Congelar el contenido firmado
 
-Activar `Adjuntar referencia` en modo visual con Files locales/object URLs.
+Mientras existe un attempt uploaded pendiente de finalize/retry:
 
-Enviar feedback en Visual Review:
+```text
+uploaded = true
+AND phase = finalizing | finalize-error
+```
 
-- agrega feedback local;
-- incluye refs locales;
-- sección Referencias se actualiza;
-- no API real.
+NO permitir modificar silenciosamente la operación.
 
-Esto sirve para validar UX desktop/mobile.
+Deshabilitar temporalmente:
 
----
+- textarea;
+- picker `Adjuntar referencia`;
+- quitar referencias;
+- agregar nuevas referencias.
 
-## 39. Tests receipts/storage
+Motivo:
 
-Agregar tests:
+el receipt ya representa ese body + set de archivos que intentamos confirmar.
 
-- kind nuevo no intercambiable con otros receipts;
-- expiry;
-- wrong user;
-- storage keys scopiadas a Delivery/Piece/Version/Feedback/Attachment;
-- max count;
-- MIME/tamaño inválido.
+No permitir que UI muestre C seleccionada cuando el receipt solo contiene A+B.
 
----
+## 13. Opción para volver a editar
 
-## 40. Tests finalize
+Agregar una acción secundaria discreta SOLO en `finalize-error`:
 
-Casos mínimos:
+`Editar feedback`
 
-- feedback + 1 attachment success;
-- múltiples attachments;
-- attachment HEAD missing/mismatch;
-- V2 aparece entre prepare/finalize → HISTORICAL_VERSION + no Feedback;
-- Delivery CLOSED → DELIVERY_CLOSED;
-- idempotent finalize retry;
-- sourceType correcto;
-- Journal attachmentCount/attachmentIds;
-- Drive enqueue una vez;
-- text-only endpoint sigue funcionando.
+o copy equivalente simple.
 
-Si no hay DB integration harness, no inventar mocks que pretendan demostrar row locks; separar tests puros y documentar manual E2E.
+Al usarla:
 
----
+1. llamar best-effort al endpoint seguro `cleanup-upload` con el attemptToken;
+2. resetear SOLO el estado técnico del attempt;
+3. conservar draft local;
+4. conservar Files/referencias locales y previews;
+5. volver a habilitar textarea/agregar/quitar referencias.
 
-## 41. Tests client
+Luego el próximo `Enviar feedback` debe hacer un PREPARE nuevo y PUT nuevo.
 
-Cubrir helpers/state donde sea razonable:
+No limpiar lo que escribió el usuario.
 
-- add/remove references;
-- duplicate Files;
-- max count;
-- PUT failure mantiene Files/draft y descarta attempt;
-- finalize 500 conserva attempt uploaded;
-- HISTORICAL_VERSION descarta attempt pero preserva draft/Files;
-- success limpia draft/refs;
-- aggregate references deriva attachments sin duplicar.
+Si cleanup falla, no bloquear la edición local; es best-effort y el orphan queda dentro del problema técnico ya documentado.
 
----
+## 14. Response-loss + body
 
-## 42. Tests Drive
+Durante el request de finalize el textarea ya está disabled.
 
-- snapshot incluye attachments;
-- manifest schemaVersion 3;
-- feedback attachmentIds reales;
-- attachments metadata/relativePath;
-- uploader incluido en users;
-- feedback.jsonl contiene attachmentIds;
-- processor no duplica archivo en segundo refresh.
+Después de un error recuperable debe seguir congelado hasta:
 
-Mocks Drive aceptables.
+- retry success;
+- o `Editar feedback` / cancelar attempt.
 
----
+Así el retry usa el mismo body que el intento original y la comparación idempotente puede ser estricta.
 
-## 43. Manual E2E real
+## 15. Errors no recuperables
 
-Con DB + R2 + Drive:
+Para:
 
-1. abrir latest PieceVersion;
-2. escribir feedback;
-3. adjuntar 2 referencias;
-4. ver previews;
-5. eliminar una;
-6. enviar;
-7. confirmar Feedback persistido;
-8. confirmar FeedbackAttachment persistido;
-9. reload;
-10. thumbnail sigue visible;
-11. sección Referencias muestra la referencia;
-12. abrir referencia grande;
-13. Drive sync;
-14. manifest v3 incluye attachment;
-15. Drive contiene archivo bajo versión correcta;
-16. subir V2;
-17. V1 mantiene referencia histórica;
-18. V2 empieza sin referencias.
+- `HISTORICAL_VERSION`;
+- `DELIVERY_CLOSED`;
+- 400 de validación/HEAD;
 
-Probar también 390×844 y desktop.
+donde server descarta/limpia el attempt:
+
+- reset técnico del attempt;
+- conservar draft + Files locales;
+- no congelar composer por ese receipt viejo;
+- aplicar refresh/toast existente.
+
+Si la versión pasa a histórica, la UI quedará read-only por la regla normal después del refresh.
 
 ---
 
-## 44. Documentación
+# Parte 3 — Tests
 
-Actualizar:
+## 16. Tests server obligatorios
+
+Agregar cobertura realista para:
+
+A.
+finalize success sobre V1
+→ crear V2
+→ retry mismo receipt
+→ success idempotente
+→ NO segundo Feedback.
+
+B.
+finalize success
+→ Delivery CLOSED
+→ retry mismo receipt
+→ success idempotente.
+
+C.
+existing feedback mismo receipt pero body distinto
+→ 409 conflict
+→ no mutation.
+
+D.
+dos finalize simultáneos mismo receipt
+→ un solo Feedback + attachments.
+
+E.
+existing finalized feedback
+→ fast-path no necesita HEAD R2.
+
+Si no hay harness DB que permita demostrar alguna carrera sin construir infraestructura desproporcionada:
+
+- no fingirlo con un mock;
+- extraer reglas testeables donde sirva;
+- documentar manual test PostgreSQL para el caso concurrente.
+
+## 17. Tests client state/UI helpers
+
+Cubrir al menos:
+
+- `finalize-error + uploaded` → label `Reintentar`;
+- finalize-error bloquea edición de draft y referencias;
+- acción `Editar feedback` resetea attempt pero preserva draft/files;
+- retry usa mismo attemptToken y no vuelve a prepare/PUT;
+- error HISTORICAL_VERSION descarta attempt y conserva contenido local.
+
+No instalar state-machine library.
+
+---
+
+# Parte 4 — Validación general
+
+## 18. No regresiones
+
+Confirmar:
+
+- text-only feedback sigue funcionando;
+- feedback con 1..10 referencias sigue funcionando;
+- historical refs siguen visibles;
+- Drive backup no cambia salvo por datos ya existentes;
+- Visual Review sigue sin APIs reales;
+- version upload V2 no cambia;
+- locks siguen `Delivery → Piece`.
+
+## 19. Docs
+
+Actualizar solo si hace falta reflejar esta semántica:
 
 - `docs/04-feedback.md`
-- `docs/05-journal.md`
-- `docs/08-google-drive.md`
 - `docs/09-errors-and-recovery.md`
-- `docs/13-open-decisions.md`
-- `docs/15-data-model.md`
-- `docs/16-drive-sync-architecture.md`
 
-Documentar que en MVP las referencias son `FeedbackAttachment` de imagen y pertenecen a un Feedback/Version concreta.
+Documentar brevemente:
 
----
+- retry de finalize es idempotente incluso si el estado de Delivery/version cambió después del commit;
+- un attempt ya subido queda congelado hasta retry o edición/cancelación explícita.
 
-## 45. Validación
+## 20. Validación técnica
 
 Ejecutar:
 
@@ -959,46 +488,38 @@ npm run build
 npx prisma validate
 ```
 
-Si `prisma validate` queda bloqueado únicamente por ausencia de `DATABASE_URL`, reportarlo sin inventar credenciales.
+Si `prisma validate` no puede correr por falta real de `DATABASE_URL`, reportarlo; no inventar una URL.
 
-No debe haber migration nueva salvo bloqueo real del schema existente.
+Revisar que no haya schema/migration accidental.
 
----
-
-## 46. Resultado esperado
+## 21. Resultado esperado
 
 Reportar:
 
-1. modelo reutilizado;
-2. receipt nuevo;
-3. prepare;
-4. R2 upload;
-5. finalize/idempotencia;
-6. cleanup;
-7. race V2/CLOSED;
-8. UI composer;
-9. previews/remove;
-10. feedback persistido con attachments;
-11. sección Referencias derivada;
-12. historical versions;
-13. Drive snapshot;
-14. manifest v3;
-15. Drive files/idempotencia;
-16. Visual Review;
-17. tests;
-18. lint;
-19. typecheck;
-20. build;
-21. prisma validate;
-22. git status.
+1. fast-path idempotente;
+2. orden de validaciones dentro de transaction;
+3. retry después de V2;
+4. retry después de CLOSED;
+5. body matching;
+6. no HEAD en retry ya finalizado;
+7. CTA Reintentar;
+8. composer congelado;
+9. Editar feedback / cleanup best-effort;
+10. preservación de draft/files;
+11. tests;
+12. lint;
+13. typecheck;
+14. build;
+15. prisma validate;
+16. git status.
 
 Si todo queda correcto:
 
 ```text
-commit: feat: add feedback reference attachments
+commit: fix: harden feedback attachment retries
 push: main
 ```
 
 Después detenerse.
 
-NO avanzar con conversation ni AI.
+NO avanzar a ConversationReply ni otras features.
