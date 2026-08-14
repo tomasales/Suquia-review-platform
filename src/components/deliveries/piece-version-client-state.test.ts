@@ -4,6 +4,7 @@ import {
   getOptimisticVersionIdsToDrop,
   mergePieceVersions,
   resolveFinalizeFailure,
+  resolveReviewMutationFailure,
 } from "./piece-version-client-state";
 
 const persistedVersions = [
@@ -53,11 +54,48 @@ assert.deepEqual(
 assert.equal(resolveFinalizeFailure({ status: 500 }).discardAttempt, false);
 assert.equal(resolveFinalizeFailure({ isNetworkError: true }).discardAttempt, false);
 assert.equal(resolveFinalizeFailure({}).discardAttempt, false);
-assert.equal(resolveFinalizeFailure({ status: 409 }).discardAttempt, true);
+assert.equal(
+  resolveFinalizeFailure({ code: "VERSION_CONFLICT", status: 409 })
+    .discardAttempt,
+  true,
+);
+assert.equal(
+  resolveFinalizeFailure({ code: "DELIVERY_CLOSED", status: 409 }).title,
+  "La entrega está cerrada",
+);
+assert.equal(resolveFinalizeFailure({ status: 409 }).discardAttempt, false);
 assert.equal(resolveFinalizeFailure({ status: 400 }).discardAttempt, true);
 assert.equal(
-  resolveFinalizeFailure({ status: 409 }).title,
+  resolveFinalizeFailure({ code: "VERSION_CONFLICT", status: 409 }).title,
   "Hay una versión más nueva",
+);
+assert.equal(
+  resolveReviewMutationFailure({
+    code: "HISTORICAL_VERSION",
+    operation: "review",
+  }).title,
+  "Hay una versión más nueva",
+);
+assert.equal(
+  resolveReviewMutationFailure({
+    code: "DELIVERY_CLOSED",
+    operation: "feedback",
+  }).title,
+  "La entrega está cerrada",
+);
+assert.equal(
+  resolveReviewMutationFailure({
+    code: "HISTORICAL_VERSION",
+    operation: "feedback",
+  }).description,
+  "Tu texto sigue acá. Revisá la versión actual antes de enviarlo.",
+);
+assert.equal(
+  resolveReviewMutationFailure({
+    code: undefined,
+    operation: "feedback",
+  }).title,
+  "No pudimos guardar el feedback",
 );
 
 console.log("piece version client state unit tests passed");

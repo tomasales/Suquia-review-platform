@@ -16,6 +16,7 @@ import {
   isPieceReviewStateNoop,
   normalizeFeedbackBody,
   parsePieceReviewState,
+  PieceReviewValidationError,
 } from "@/lib/piece-review-rules";
 
 assert.equal(parsePieceReviewState("OK"), PieceReviewState.OK);
@@ -23,7 +24,12 @@ assert.equal(
   parsePieceReviewState("NEEDS_CHANGES"),
   PieceReviewState.NEEDS_CHANGES,
 );
-assert.throws(() => parsePieceReviewState("PENDING"));
+assert.throws(
+  () => parsePieceReviewState("PENDING"),
+  (error) =>
+    error instanceof PieceReviewValidationError &&
+    error.code === "INVALID_REVIEW_STATE",
+);
 assert.equal(
   isPieceReviewStateNoop({
     currentState: PieceReviewState.OK,
@@ -87,7 +93,12 @@ assert.equal(
   DeliveryStatus.CHANGES_REQUESTED,
 );
 
-assert.throws(() => assertDeliveryCanBeReviewed(DeliveryStatus.CLOSED));
+assert.throws(
+  () => assertDeliveryCanBeReviewed(DeliveryStatus.CLOSED),
+  (error) =>
+    error instanceof PieceReviewValidationError &&
+    error.code === "DELIVERY_CLOSED",
+);
 assert.doesNotThrow(() =>
   assertDeliveryCanBeReviewed(DeliveryStatus.IN_REVIEW),
 );

@@ -7,6 +7,7 @@ import {
   verifyPieceVersionUploadReceipt,
 } from "@/lib/delivery-upload-receipt";
 import { db } from "@/lib/db";
+import { lockDeliveryForMutation } from "@/lib/delivery-mutation-lock";
 import { enqueueDriveBackupRefresh } from "@/lib/drive/enqueue";
 import { lockPieceForMutation } from "@/lib/piece-mutation-lock";
 import { buildDeliveryStatusJournalMetadata } from "@/lib/piece-review-rules";
@@ -41,7 +42,11 @@ export async function POST(
     assertDeliveryUploadReceiptUser(receipt, user.id);
 
     if (receipt.pieceId !== pieceId) {
-      throw new PieceVersionUploadError("La versión no corresponde a esta pieza.");
+      throw new PieceVersionUploadError(
+        "La versión no corresponde a esta pieza.",
+        409,
+        "VERSION_CONFLICT",
+      );
     }
 
     assertPieceVersionStorageKey({
@@ -77,7 +82,11 @@ export async function POST(
         });
       }
 
-      throw new PieceVersionUploadError("La versión ya existe.", 409);
+      throw new PieceVersionUploadError(
+        "La versión ya existe.",
+        409,
+        "VERSION_CONFLICT",
+      );
     }
 
     const verification = await verifyUploadedObject({
@@ -98,6 +107,7 @@ export async function POST(
 
     try {
       const finalized = await db.$transaction(async (tx) => {
+        await lockDeliveryForMutation(tx, receipt.deliveryId);
         await lockPieceForMutation(tx, receipt.pieceId);
 
         const existingVersionInTransaction = await tx.pieceVersion.findUnique({
@@ -127,7 +137,11 @@ export async function POST(
             };
           }
 
-          throw new PieceVersionUploadError("La versión ya existe.", 409);
+          throw new PieceVersionUploadError(
+            "La versión ya existe.",
+            409,
+            "VERSION_CONFLICT",
+          );
         }
 
         const piece = await tx.piece.findUnique({
@@ -156,12 +170,24 @@ export async function POST(
           },
         });
 
-        if (!piece || piece.delivery.deletedAt) {
-          throw new PieceVersionUploadError("La pieza no existe.", 404);
+        if (
+          !piece ||
+          piece.delivery.id !== receipt.deliveryId ||
+          piece.delivery.deletedAt
+        ) {
+          throw new PieceVersionUploadError(
+            "La pieza no existe.",
+            404,
+            "PIECE_NOT_FOUND",
+          );
         }
 
         if (piece.delivery.status === DeliveryStatus.CLOSED) {
-          throw new PieceVersionUploadError("La entrega está cerrada.", 409);
+          throw new PieceVersionUploadError(
+            "La entrega está cerrada.",
+            409,
+            "DELIVERY_CLOSED",
+          );
         }
 
         const latestVersion = piece.versions[0] ?? null;
@@ -174,6 +200,7 @@ export async function POST(
           throw new PieceVersionUploadError(
             "La pieza ya tiene una versión más nueva.",
             409,
+            "VERSION_CONFLICT",
           );
         }
 
@@ -271,6 +298,7 @@ export async function POST(
         throw new PieceVersionUploadError(
           "La pieza ya tiene una versión más nueva.",
           409,
+          "VERSION_CONFLICT",
         );
       }
 
@@ -280,7 +308,7 @@ export async function POST(
     const apiError = pieceVersionUploadApiError(error);
 
     return NextResponse.json(
-      { error: apiError.message },
+      { code: apiError.code, error: apiError.message },
       { status: apiError.status },
     );
   }

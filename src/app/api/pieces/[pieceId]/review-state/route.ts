@@ -34,7 +34,7 @@ export async function PATCH(
     const apiError = pieceReviewApiError(error);
 
     return NextResponse.json(
-      { error: apiError.message },
+      { code: apiError.code, error: apiError.message },
       { status: apiError.status },
     );
   }

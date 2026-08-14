@@ -16,10 +16,16 @@ export type PreparedPieceVersionInput = {
   mimeType: string;
 };
 
+export type PieceVersionUploadErrorCode =
+  | "DELIVERY_CLOSED"
+  | "PIECE_NOT_FOUND"
+  | "VERSION_CONFLICT";
+
 export class PieceVersionUploadError extends Error {
   constructor(
     message: string,
     public readonly status = 400,
+    public readonly code?: PieceVersionUploadErrorCode,
   ) {
     super(message);
     this.name = "PieceVersionUploadError";
@@ -94,6 +100,7 @@ export function assertPieceVersionStorageKey({
 export function pieceVersionUploadApiError(error: unknown) {
   if (error instanceof PieceVersionUploadError) {
     return {
+      code: error.code,
       message: error.message,
       status: error.status,
     };
@@ -101,6 +108,7 @@ export function pieceVersionUploadApiError(error: unknown) {
 
   if (error instanceof StorageValidationError) {
     return {
+      code: undefined,
       message: getPublicStorageErrorMessage(error),
       status: 400,
     };
@@ -108,12 +116,14 @@ export function pieceVersionUploadApiError(error: unknown) {
 
   if (error instanceof StorageConfigurationError) {
     return {
+      code: undefined,
       message: getPublicStorageErrorMessage(error),
       status: 500,
     };
   }
 
   return {
+    code: undefined,
     message: "No pudimos subir la nueva versión.",
     status: 500,
   };

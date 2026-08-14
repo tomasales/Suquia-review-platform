@@ -6,10 +6,17 @@ import {
 
 export const MAX_FEEDBACK_BODY_LENGTH = 5000;
 
+export type PieceReviewErrorCode =
+  | "DELIVERY_CLOSED"
+  | "HISTORICAL_VERSION"
+  | "INVALID_REVIEW_STATE"
+  | "PIECE_NOT_FOUND";
+
 export class PieceReviewValidationError extends Error {
   constructor(
     message: string,
     public readonly status = 400,
+    public readonly code?: PieceReviewErrorCode,
   ) {
     super(message);
     this.name = "PieceReviewValidationError";
@@ -21,7 +28,11 @@ export function parsePieceReviewState(value: unknown) {
     value !== PieceReviewState.OK &&
     value !== PieceReviewState.NEEDS_CHANGES
   ) {
-    throw new PieceReviewValidationError("Estado de revisión inválido.");
+    throw new PieceReviewValidationError(
+      "Estado de revisión inválido.",
+      400,
+      "INVALID_REVIEW_STATE",
+    );
   }
 
   return value;
@@ -59,7 +70,11 @@ export function normalizeFeedbackBody(value: unknown) {
 
 export function assertDeliveryCanBeReviewed(status: DeliveryStatus) {
   if (status === DeliveryStatus.CLOSED) {
-    throw new PieceReviewValidationError("La entrega está cerrada.", 409);
+    throw new PieceReviewValidationError(
+      "La entrega está cerrada.",
+      409,
+      "DELIVERY_CLOSED",
+    );
   }
 }
 

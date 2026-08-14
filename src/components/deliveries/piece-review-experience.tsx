@@ -13,6 +13,7 @@ import {
   getOptimisticVersionIdsToDrop,
   mergePieceVersions,
   resolveFinalizeFailure,
+  resolveReviewMutationFailure,
 } from "./piece-version-client-state";
 
 type Piece = DeliveryDetail["pieces"][number];
@@ -250,7 +251,7 @@ export function PieceReviewExperience({
       });
 
       if (!response.ok) {
-        throw new ApiRequestError(response.status);
+        throw await readApiError(response);
       }
 
       void driveRuntime.notifyBackupPending();
@@ -258,19 +259,18 @@ export function PieceReviewExperience({
     } catch (error) {
       setReviewOverride(selectedVersion.id, previousReviewState);
 
-      if (error instanceof ApiRequestError && error.status === 409) {
+      const resolution = resolveReviewMutationFailure({
+        code: error instanceof ApiRequestError ? error.code : undefined,
+        operation: "review",
+      });
+
+      if (resolution.shouldRefresh) {
         router.refresh();
-        showToast({
-          description: "Revisá la versión actual.",
-          title: "Hay una versión más nueva",
-          tone: "error",
-        });
-        return;
       }
 
       showToast({
-        description: "Intentá nuevamente.",
-        title: "No pudimos guardar la revisión",
+        description: resolution.description,
+        title: resolution.title,
         tone: "error",
       });
     } finally {
@@ -335,7 +335,7 @@ export function PieceReviewExperience({
       });
 
       if (!response.ok) {
-        throw new ApiRequestError(response.status);
+        throw await readApiError(response);
       }
 
       const result = (await response.json()) as { feedback: PieceFeedback };
@@ -345,20 +345,18 @@ export function PieceReviewExperience({
       void driveRuntime.notifyBackupPending();
       router.refresh();
     } catch (error) {
-      if (error instanceof ApiRequestError && error.status === 409) {
+      const resolution = resolveReviewMutationFailure({
+        code: error instanceof ApiRequestError ? error.code : undefined,
+        operation: "feedback",
+      });
+
+      if (resolution.shouldRefresh) {
         router.refresh();
-        showToast({
-          description:
-            "Tu texto sigue acá. Revisá la versión actual antes de enviarlo.",
-          title: "Hay una versión más nueva",
-          tone: "error",
-        });
-        return;
       }
 
       showToast({
-        description: "Tu texto sigue acá. Intentá nuevamente.",
-        title: "No pudimos guardar el feedback",
+        description: resolution.description,
+        title: resolution.title,
         tone: "error",
       });
     } finally {
@@ -486,7 +484,10 @@ export function PieceReviewExperience({
         );
 
         if (!prepareResponse.ok) {
-          throw new VersionUploadFlowError("prepare", prepareResponse.status);
+          throw new VersionUploadFlowError(
+            "prepare",
+            await readApiError(prepareResponse),
+          );
         }
 
         prepared = (await prepareResponse.json()) as PrepareVersionResponse;
@@ -524,7 +525,9 @@ export function PieceReviewExperience({
         });
 
         if (!uploadResponse.ok) {
-          throw new VersionUploadFlowError("upload", uploadResponse.status);
+          throw new VersionUploadFlowError("upload", {
+            status: uploadResponse.status,
+          });
         }
 
         activeUploaded = true;
@@ -560,7 +563,10 @@ export function PieceReviewExperience({
       );
 
       if (!finalizeResponse.ok) {
-        throw new VersionUploadFlowError("finalize", finalizeResponse.status);
+        throw new VersionUploadFlowError(
+          "finalize",
+          await readApiError(finalizeResponse),
+        );
       }
 
       const finalized = (await finalizeResponse.json()) as FinalizeVersionResponse;
@@ -595,7 +601,8 @@ export function PieceReviewExperience({
 
       if (uploadError.phase === "finalize") {
         const resolution = resolveFinalizeFailure({
-          status: uploadError.status,
+          code: uploadError.apiError?.code,
+          status: uploadError.apiError?.status,
         });
 
         setVersionUploads((current) => ({
@@ -622,7 +629,10 @@ export function PieceReviewExperience({
           tone: "error",
         });
 
-        if (uploadError.status === 409) {
+        if (
+          uploadError.apiError?.code === "VERSION_CONFLICT" ||
+          uploadError.apiError?.code === "DELIVERY_CLOSED"
+        ) {
           router.refresh();
         }
 
@@ -823,19 +833,73 @@ function mergeFeedback(
   });
 }
 
+type ApiErrorCode =
+  | "DELIVERY_CLOSED"
+  | "HISTORICAL_VERSION"
+  | "INVALID_REVIEW_STATE"
+  | "PIECE_NOT_FOUND"
+  | "VERSION_CONFLICT";
+
+type ApiErrorPayload = {
+  code?: ApiErrorCode;
+  message?: string;
+  status: number;
+};
+
 class ApiRequestError extends Error {
-  constructor(public readonly status: number) {
-    super("API request failed.");
+  public readonly code?: ApiErrorCode;
+  public readonly status: number;
+
+  constructor({ code, message, status }: ApiErrorPayload) {
+    super(message ?? "API request failed.");
     this.name = "ApiRequestError";
+    this.code = code;
+    this.status = status;
   }
 }
 
 class VersionUploadFlowError extends Error {
   constructor(
     public readonly phase: VersionUploadFlowPhase,
-    public readonly status?: number,
+    public readonly apiError?: ApiErrorPayload,
   ) {
     super("Version upload flow failed.");
     this.name = "VersionUploadFlowError";
   }
+}
+
+async function readApiError(response: Response) {
+  let payload: unknown;
+
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (isApiErrorPayload(payload)) {
+    return new ApiRequestError({
+      code: isApiErrorCode(payload.code) ? payload.code : undefined,
+      message: typeof payload.error === "string" ? payload.error : undefined,
+      status: response.status,
+    });
+  }
+
+  return new ApiRequestError({ status: response.status });
+}
+
+function isApiErrorPayload(
+  payload: unknown,
+): payload is { code?: unknown; error?: unknown } {
+  return typeof payload === "object" && payload !== null;
+}
+
+function isApiErrorCode(code: unknown): code is ApiErrorCode {
+  return (
+    code === "DELIVERY_CLOSED" ||
+    code === "HISTORICAL_VERSION" ||
+    code === "INVALID_REVIEW_STATE" ||
+    code === "PIECE_NOT_FOUND" ||
+    code === "VERSION_CONFLICT"
+  );
 }

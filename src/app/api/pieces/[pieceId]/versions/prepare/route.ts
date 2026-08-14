@@ -57,11 +57,19 @@ export async function POST(
     });
 
     if (!piece || piece.delivery.deletedAt) {
-      throw new PieceVersionUploadError("La pieza no existe.", 404);
+      throw new PieceVersionUploadError(
+        "La pieza no existe.",
+        404,
+        "PIECE_NOT_FOUND",
+      );
     }
 
     if (piece.delivery.status === DeliveryStatus.CLOSED) {
-      throw new PieceVersionUploadError("La entrega está cerrada.", 409);
+      throw new PieceVersionUploadError(
+        "La entrega está cerrada.",
+        409,
+        "DELIVERY_CLOSED",
+      );
     }
 
     const latestVersion = piece.versions[0] ?? null;
@@ -111,7 +119,7 @@ export async function POST(
     const apiError = pieceVersionUploadApiError(error);
 
     return NextResponse.json(
-      { error: apiError.message },
+      { code: apiError.code, error: apiError.message },
       { status: apiError.status },
     );
   }

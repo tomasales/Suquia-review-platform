@@ -3,6 +3,7 @@ import "server-only";
 import { FeedbackLevel } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { lockDeliveryForMutation } from "@/lib/delivery-mutation-lock";
 import { enqueueDriveBackupRefresh } from "@/lib/drive/enqueue";
 import { lockPieceForMutation } from "@/lib/piece-mutation-lock";
 import {
@@ -50,7 +51,10 @@ export async function updatePieceReviewState({
     throw new PieceReviewValidationError("Versión de pieza inválida.");
   }
 
+  const deliveryId = await getPieceDeliveryId(pieceId);
+
   return db.$transaction(async (tx) => {
+    await lockDeliveryForMutation(tx, deliveryId);
     await lockPieceForMutation(tx, pieceId);
 
     const piece = await tx.piece.findUnique({
@@ -78,8 +82,12 @@ export async function updatePieceReviewState({
       },
     });
 
-    if (!piece || piece.delivery.deletedAt) {
-      throw new PieceReviewValidationError("La pieza no existe.", 404);
+    if (!piece || piece.delivery.id !== deliveryId || piece.delivery.deletedAt) {
+      throw new PieceReviewValidationError(
+        "La pieza no existe.",
+        404,
+        "PIECE_NOT_FOUND",
+      );
     }
 
     assertDeliveryCanBeReviewed(piece.delivery.status);
@@ -90,6 +98,7 @@ export async function updatePieceReviewState({
       throw new PieceReviewValidationError(
         "Esta versión ya forma parte del historial.",
         409,
+        "HISTORICAL_VERSION",
       );
     }
 
@@ -210,8 +219,10 @@ export async function addPieceFeedback({
   }
 
   const sourceType = getFeedbackSourceType(user.isAiLearningSource);
+  const deliveryId = await getPieceDeliveryId(pieceId);
 
   return db.$transaction(async (tx) => {
+    await lockDeliveryForMutation(tx, deliveryId);
     await lockPieceForMutation(tx, pieceId);
 
     const piece = await tx.piece.findUnique({
@@ -237,8 +248,12 @@ export async function addPieceFeedback({
       },
     });
 
-    if (!piece || piece.delivery.deletedAt) {
-      throw new PieceReviewValidationError("La pieza no existe.", 404);
+    if (!piece || piece.delivery.id !== deliveryId || piece.delivery.deletedAt) {
+      throw new PieceReviewValidationError(
+        "La pieza no existe.",
+        404,
+        "PIECE_NOT_FOUND",
+      );
     }
 
     assertDeliveryCanBeReviewed(piece.delivery.status);
@@ -263,6 +278,7 @@ export async function addPieceFeedback({
       throw new PieceReviewValidationError(
         "Esta versión ya forma parte del historial.",
         409,
+        "HISTORICAL_VERSION",
       );
     }
 
@@ -362,12 +378,14 @@ export async function addPieceFeedback({
 export function pieceReviewApiError(error: unknown) {
   if (error instanceof PieceReviewValidationError) {
     return {
+      code: error.code,
       message: error.message,
       status: error.status,
     };
   }
 
   return {
+    code: undefined,
     message: "No pudimos guardar la revisión.",
     status: 500,
   };
@@ -375,4 +393,25 @@ export function pieceReviewApiError(error: unknown) {
 
 function formatFeedbackDate(date: Date) {
   return feedbackDateFormatter.format(date);
+}
+
+async function getPieceDeliveryId(pieceId: string) {
+  const piece = await db.piece.findUnique({
+    where: {
+      id: pieceId,
+    },
+    select: {
+      deliveryId: true,
+    },
+  });
+
+  if (!piece) {
+    throw new PieceReviewValidationError(
+      "La pieza no existe.",
+      404,
+      "PIECE_NOT_FOUND",
+    );
+  }
+
+  return piece.deliveryId;
 }

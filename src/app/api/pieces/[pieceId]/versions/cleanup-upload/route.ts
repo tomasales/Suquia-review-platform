@@ -61,7 +61,7 @@ export async function POST(
     const apiError = pieceVersionUploadApiError(error);
 
     return NextResponse.json(
-      { error: apiError.message },
+      { code: apiError.code, error: apiError.message },
       { status: apiError.status },
     );
   }
