@@ -7,6 +7,7 @@ import { lockDeliveryForMutation } from "@/lib/delivery-mutation-lock";
 import type { PieceFeedbackAttachmentsReceiptPayload } from "@/lib/delivery-upload-receipt";
 import { enqueueDriveBackupRefresh } from "@/lib/drive/enqueue";
 import { lockPieceForMutation } from "@/lib/piece-mutation-lock";
+import { assertExistingFeedbackMatchesReceipt } from "@/lib/piece-feedback-attempt-rules";
 import {
   assertDeliveryCanBeReviewed,
   buildDeliveryStatusJournalMetadata,
@@ -53,6 +54,7 @@ const feedbackDtoSelect = {
       mimeType: true,
       originalFilename: true,
       storageKey: true,
+      uploadedByUserId: true,
       uploadedBy: {
         select: {
           email: true,
@@ -70,6 +72,13 @@ const feedbackDtoSelect = {
   authorUserId: true,
   body: true,
   createdAt: true,
+  delivery: {
+    select: {
+      id: true,
+      status: true,
+    },
+  },
+  deliveryId: true,
   id: true,
   pieceId: true,
   pieceVersionId: true,
@@ -326,6 +335,50 @@ export async function addPieceFeedbackWithAttachments({
   };
 }
 
+export async function getFinalizedPieceFeedbackAttachmentAttempt({
+  body,
+  pieceId,
+  receipt,
+  user,
+}: {
+  body: unknown;
+  pieceId: string;
+  receipt: PieceFeedbackAttachmentsReceiptPayload;
+  user: ReviewUser;
+}) {
+  const normalizedBody = normalizeFeedbackBody(body);
+  const sourceType = getFeedbackSourceType(user.isAiLearningSource);
+  const existingFeedback = await db.feedback.findUnique({
+    where: {
+      id: receipt.feedbackId,
+    },
+    select: feedbackDtoSelect,
+  });
+
+  if (!existingFeedback) {
+    return null;
+  }
+
+  assertExistingFeedbackMatchesReceipt(existingFeedback, {
+    attachments: receipt.attachments,
+    authorUserId: user.id,
+    body: normalizedBody,
+    deliveryId: receipt.deliveryId,
+    pieceId,
+    pieceVersionId: receipt.pieceVersionId,
+    sourceType,
+  });
+
+  return {
+    alreadyFinalized: true,
+    delivery: {
+      id: existingFeedback.delivery.id,
+      status: existingFeedback.delivery.status,
+    },
+    feedback: await toPieceFeedbackDto(existingFeedback),
+  };
+}
+
 export function pieceReviewApiError(error: unknown) {
   if (error instanceof PieceReviewValidationError) {
     return {
@@ -422,18 +475,6 @@ async function addPieceFeedbackInTransaction(
     );
   }
 
-  assertDeliveryCanBeReviewed(piece.delivery.status);
-
-  const latestVersion = piece.versions[0] ?? null;
-
-  if (!latestVersion || latestVersion.id !== pieceVersionId) {
-    throw new PieceReviewValidationError(
-      "Esta versión ya forma parte del historial.",
-      409,
-      "HISTORICAL_VERSION",
-    );
-  }
-
   if (feedbackId) {
     const existingFeedback = await tx.feedback.findUnique({
       where: {
@@ -446,8 +487,11 @@ async function addPieceFeedbackInTransaction(
       assertExistingFeedbackMatchesReceipt(existingFeedback, {
         attachments,
         authorUserId: user.id,
+        body,
+        deliveryId: piece.delivery.id,
         pieceId: piece.id,
-        pieceVersionId: latestVersion.id,
+        pieceVersionId,
+        sourceType,
       });
 
       return {
@@ -459,6 +503,18 @@ async function addPieceFeedbackInTransaction(
         feedback: existingFeedback,
       };
     }
+  }
+
+  assertDeliveryCanBeReviewed(piece.delivery.status);
+
+  const latestVersion = piece.versions[0] ?? null;
+
+  if (!latestVersion || latestVersion.id !== pieceVersionId) {
+    throw new PieceReviewValidationError(
+      "Esta versión ya forma parte del historial.",
+      409,
+      "HISTORICAL_VERSION",
+    );
   }
 
   const nextDeliveryStatus = getDeliveryStatusAfterFeedback(
@@ -558,55 +614,6 @@ async function addPieceFeedbackInTransaction(
     },
     feedback: feedbackWithAttachments,
   };
-}
-
-function assertExistingFeedbackMatchesReceipt(
-  feedback: FeedbackForDto,
-  {
-    attachments,
-    authorUserId,
-    pieceId,
-    pieceVersionId,
-  }: {
-    attachments: FeedbackAttachmentInput[];
-    authorUserId: string;
-    pieceId: string;
-    pieceVersionId: string;
-  },
-) {
-  const expectedAttachments = [...attachments].sort((left, right) =>
-    left.id.localeCompare(right.id),
-  );
-  const actualAttachments = [...feedback.attachments].sort((left, right) =>
-    left.id.localeCompare(right.id),
-  );
-
-  if (
-    feedback.authorUserId !== authorUserId ||
-    feedback.pieceId !== pieceId ||
-    feedback.pieceVersionId !== pieceVersionId ||
-    actualAttachments.length !== expectedAttachments.length
-  ) {
-    throw new PieceReviewValidationError("El intento de feedback no coincide.", 409);
-  }
-
-  for (const [index, expected] of expectedAttachments.entries()) {
-    const actual = actualAttachments[index];
-
-    if (
-      !actual ||
-      actual.id !== expected.id ||
-      actual.fileSizeBytes !== BigInt(expected.fileSizeBytes) ||
-      actual.mimeType !== expected.mimeType ||
-      actual.originalFilename !== expected.filename.trim() ||
-      actual.storageKey !== expected.storageKey
-    ) {
-      throw new PieceReviewValidationError(
-        "El intento de feedback no coincide.",
-        409,
-      );
-    }
-  }
 }
 
 async function toPieceFeedbackDto(feedback: FeedbackForDto) {

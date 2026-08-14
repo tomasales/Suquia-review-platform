@@ -9,6 +9,7 @@ import {
 import { db } from "@/lib/db";
 import {
   addPieceFeedbackWithAttachments,
+  getFinalizedPieceFeedbackAttachmentAttempt,
   pieceReviewApiError,
 } from "@/lib/piece-review-actions";
 import { PieceReviewValidationError } from "@/lib/piece-review-rules";
@@ -37,6 +38,17 @@ export async function POST(
 
     if (receipt.pieceId !== pieceId) {
       throw new StorageValidationError("Receipt de subida inválido.");
+    }
+
+    const finalizedAttempt = await getFinalizedPieceFeedbackAttachmentAttempt({
+      body: input.body,
+      pieceId,
+      receipt,
+      user,
+    });
+
+    if (finalizedAttempt) {
+      return NextResponse.json(finalizedAttempt);
     }
 
     try {

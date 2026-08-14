@@ -52,6 +52,8 @@ Reglas:
 - Las referencias quedan asociadas al `Feedback` concreto y, por transitividad, a la `PieceVersion` donde ese feedback fue creado.
 - Las referencias históricas permanecen visibles al navegar versiones anteriores.
 - Solo la última `PieceVersion` acepta feedback nuevo y referencias nuevas.
+- Si un finalize con referencias ya creó el `Feedback`, los reintentos con el mismo receipt y el mismo texto son idempotentes aunque luego la entrega se cierre o aparezca una versión nueva.
+- Si el mismo receipt llega con otro texto o con otra composición de referencias, el servidor debe responder conflicto y no crear un segundo `Feedback`.
 - No se implementan pins, coordenadas ni galería avanzada en MVP.
 
 ## Pendiente de definición

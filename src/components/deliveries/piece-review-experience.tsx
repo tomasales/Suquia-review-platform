@@ -14,6 +14,7 @@ import {
   getFeedbackReferenceIdentityKey,
   getFeedbackReferenceSlotsAvailable,
   getOptimisticVersionIdsToDrop,
+  isFeedbackAttachmentAttemptFrozen,
   mergePieceVersions,
   resolveFinalizeFailure,
   resolveReviewMutationFailure,
@@ -234,6 +235,8 @@ export function PieceReviewExperience({
   const selectedFeedbackAttachmentUpload = draftKey
     ? feedbackAttachmentUploads[draftKey] ?? defaultFeedbackAttachmentUploadState
     : defaultFeedbackAttachmentUploadState;
+  const isSelectedFeedbackAttachmentAttemptFrozen =
+    isFeedbackAttachmentAttemptFrozen(selectedFeedbackAttachmentUpload);
   const selectedUploadState = selectedPiece
     ? versionUploads[selectedPiece.id] ?? defaultUploadState
     : defaultUploadState;
@@ -349,7 +352,12 @@ export function PieceReviewExperience({
   }
 
   function updateDraft(value: string) {
-    if (!draftKey || isReadOnly || !isSelectedLatestVersion) {
+    if (
+      !draftKey ||
+      isReadOnly ||
+      !isSelectedLatestVersion ||
+      isSelectedFeedbackAttachmentAttemptFrozen
+    ) {
       return;
     }
 
@@ -364,6 +372,7 @@ export function PieceReviewExperience({
       !draftKey ||
       isReadOnly ||
       !isSelectedLatestVersion ||
+      isSelectedFeedbackAttachmentAttemptFrozen ||
       selectedFeedbackAttachmentUpload.phase === "preparing" ||
       selectedFeedbackAttachmentUpload.phase === "uploading" ||
       selectedFeedbackAttachmentUpload.phase === "finalizing"
@@ -413,7 +422,7 @@ export function PieceReviewExperience({
   }
 
   function removeFeedbackReference(referenceId: string) {
-    if (!draftKey) {
+    if (!draftKey || isSelectedFeedbackAttachmentAttemptFrozen) {
       return;
     }
 
@@ -459,6 +468,23 @@ export function PieceReviewExperience({
       return next;
     });
     setDrafts((current) => ({ ...current, [key]: "" }));
+  }
+
+  function editFeedbackAfterFinalizeError() {
+    if (
+      !draftKey ||
+      selectedFeedbackAttachmentUpload.phase !== "finalize-error" ||
+      !selectedFeedbackAttachmentUpload.attemptToken ||
+      !selectedPiece
+    ) {
+      return;
+    }
+
+    void cleanupFeedbackAttachmentUpload(
+      selectedPiece.id,
+      selectedFeedbackAttachmentUpload.attemptToken,
+    );
+    resetFeedbackAttachmentAttempt(draftKey);
   }
 
   async function submitFeedback() {
@@ -717,6 +743,17 @@ export function PieceReviewExperience({
       }
 
       phase = "finalize";
+      setFeedbackAttachmentUploads((current) => ({
+        ...current,
+        [draftKey]: {
+          ...(current[draftKey] ?? selectedFeedbackAttachmentUpload),
+          attemptToken,
+          attachmentUploads,
+          error: null,
+          phase: "finalizing",
+          uploaded: true,
+        },
+      }));
       const finalizeResponse = await fetch(
         `/api/pieces/${pieceId}/feedback/attachments/finalize`,
         {
@@ -1123,6 +1160,7 @@ export function PieceReviewExperience({
           isReviewSaving={pendingReviewVersionId === selectedVersion.id}
           onClose={closeModal}
           onDraftChange={updateDraft}
+          onFeedbackAttemptEdit={editFeedbackAfterFinalizeError}
           onFeedbackReferenceRemove={removeFeedbackReference}
           onFeedbackReferenceSelect={selectFeedbackReferences}
           onFeedbackSubmit={submitFeedback}

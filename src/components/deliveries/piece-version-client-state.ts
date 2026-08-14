@@ -26,6 +26,12 @@ export type ReviewMutationFailureResolution = {
   title: string;
 };
 
+export type FeedbackAttachmentUploadSnapshot = {
+  isSubmitting?: boolean;
+  phase: string;
+  uploaded: boolean;
+};
+
 export const MAX_FEEDBACK_REFERENCES = 10;
 export const MAX_FEEDBACK_REFERENCE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 
@@ -202,4 +208,35 @@ export function getFeedbackReferenceIdentityKey(
 
 export function getFeedbackReferenceSlotsAvailable(currentCount: number) {
   return Math.max(0, MAX_FEEDBACK_REFERENCES - currentCount);
+}
+
+export function isFeedbackAttachmentAttemptFrozen({
+  phase,
+  uploaded,
+}: FeedbackAttachmentUploadSnapshot) {
+  return uploaded && (phase === "finalizing" || phase === "finalize-error");
+}
+
+export function getFeedbackSubmitLabel({
+  isSubmitting,
+  phase,
+  uploaded,
+}: FeedbackAttachmentUploadSnapshot) {
+  if (uploaded && phase === "finalize-error") {
+    return "Reintentar";
+  }
+
+  if (!isSubmitting) {
+    return "Enviar feedback";
+  }
+
+  if (phase === "uploading") {
+    return "Subiendo referencias...";
+  }
+
+  if (phase === "finalizing") {
+    return "Guardando...";
+  }
+
+  return "Enviando…";
 }

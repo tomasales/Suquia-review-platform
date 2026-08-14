@@ -7,6 +7,10 @@ import type { DeliveryDetail } from "@/lib/deliveries";
 
 import { getReviewStatePresentation } from "./piece-card";
 import { PiecePreview } from "./piece-preview";
+import {
+  getFeedbackSubmitLabel,
+  isFeedbackAttachmentAttemptFrozen,
+} from "./piece-version-client-state";
 
 type Piece = DeliveryDetail["pieces"][number];
 type PieceVersion = Piece["versions"][number];
@@ -31,6 +35,7 @@ type PieceReviewPanelProps = {
   isReadOnly: boolean;
   isReviewSaving: boolean;
   onDraftChange: (value: string) => void;
+  onFeedbackAttemptEdit: () => void;
   onFeedbackReferenceRemove: (referenceId: string) => void;
   onFeedbackReferenceSelect: (files: FileList | File[]) => void;
   onFeedbackSubmit: () => void;
@@ -60,6 +65,7 @@ export function PieceReviewPanel({
   isReviewSaving,
   isMobileLayout = false,
   onDraftChange,
+  onFeedbackAttemptEdit,
   onFeedbackReferenceRemove,
   onFeedbackReferenceSelect,
   onFeedbackSubmit,
@@ -83,18 +89,22 @@ export function PieceReviewPanel({
     feedbackAttachmentUpload.phase === "preparing" ||
     feedbackAttachmentUpload.phase === "uploading" ||
     feedbackAttachmentUpload.phase === "finalizing";
+  const isFeedbackAttachmentFrozen = isFeedbackAttachmentAttemptFrozen(
+    feedbackAttachmentUpload,
+  );
+  const isFeedbackComposerLocked =
+    isFeedbackAttachmentActive || isFeedbackAttachmentFrozen;
+  const isFeedbackSubmitBlockedByAttempt =
+    isFeedbackAttachmentFrozen &&
+    feedbackAttachmentUpload.phase !== "finalize-error";
   const hasInvalidFeedbackReferences = feedbackReferences.some(
     (reference) => reference.error,
   );
-  const feedbackSubmitLabel = isFeedbackSubmitting
-    ? feedbackAttachmentUpload.phase === "uploading"
-      ? "Subiendo referencias..."
-      : feedbackAttachmentUpload.phase === "finalizing"
-        ? "Guardando..."
-        : feedbackAttachmentUpload.phase === "finalize-error"
-          ? "Reintentar"
-          : "Enviando…"
-    : "Enviar feedback";
+  const feedbackSubmitLabel = getFeedbackSubmitLabel({
+    isSubmitting: isFeedbackSubmitting,
+    phase: feedbackAttachmentUpload.phase,
+    uploaded: feedbackAttachmentUpload.uploaded,
+  });
   const versionUploadLabel = versionUpload.isUploading
     ? versionUpload.phase === "finalizing"
       ? "Finalizando..."
@@ -263,7 +273,11 @@ export function PieceReviewPanel({
           <div className="mt-3">
             <textarea
               className="min-h-24 w-full resize-none rounded-[8px] border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-subtle-foreground focus:border-subtle-foreground"
-              disabled={isInteractionDisabled || isFeedbackSubmitting}
+              disabled={
+                isInteractionDisabled ||
+                isFeedbackSubmitting ||
+                isFeedbackAttachmentFrozen
+              }
               onChange={(event) => onDraftChange(event.target.value)}
               placeholder={
                 isLatestVersion
@@ -310,7 +324,7 @@ export function PieceReviewPanel({
                       <button
                         aria-label="Quitar referencia"
                         className="inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] border border-border text-muted-foreground disabled:opacity-45"
-                        disabled={isFeedbackAttachmentActive}
+                        disabled={isFeedbackComposerLocked}
                         onClick={() => onFeedbackReferenceRemove(reference.id)}
                         type="button"
                       >
@@ -322,9 +336,21 @@ export function PieceReviewPanel({
               </div>
             ) : null}
             {feedbackAttachmentUpload.error ? (
-              <p className="mt-2 text-xs leading-5 text-amber-800">
-                {feedbackAttachmentUpload.error}
-              </p>
+              <div className="mt-2 flex flex-col gap-2 rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs leading-5 text-amber-800">
+                  {feedbackAttachmentUpload.error}
+                </p>
+                {feedbackAttachmentUpload.uploaded &&
+                feedbackAttachmentUpload.phase === "finalize-error" ? (
+                  <Button
+                    onClick={onFeedbackAttemptEdit}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    Editar feedback
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
             <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <input
@@ -341,9 +367,15 @@ export function PieceReviewPanel({
                 type="file"
               />
               <label
-                aria-disabled={isInteractionDisabled || isFeedbackSubmitting}
+                aria-disabled={
+                  isInteractionDisabled ||
+                  isFeedbackSubmitting ||
+                  isFeedbackComposerLocked
+                }
                 className={`inline-flex min-h-9 cursor-pointer items-center justify-start rounded-[8px] border border-border px-3 text-sm font-medium transition-colors ${
-                  isInteractionDisabled || isFeedbackSubmitting
+                  isInteractionDisabled ||
+                  isFeedbackSubmitting ||
+                  isFeedbackComposerLocked
                     ? "pointer-events-none opacity-50"
                     : "text-muted-foreground hover:bg-surface-muted"
                 }`}
@@ -356,6 +388,7 @@ export function PieceReviewPanel({
                 disabled={
                   isInteractionDisabled ||
                   isFeedbackSubmitting ||
+                  isFeedbackSubmitBlockedByAttempt ||
                   hasInvalidFeedbackReferences ||
                   !draft.trim()
                 }

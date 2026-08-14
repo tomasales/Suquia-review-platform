@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 
 import {
+  getFeedbackSubmitLabel,
   getFeedbackReferenceFileError,
   getFeedbackReferenceIdentityKey,
   getFeedbackReferenceSlotsAvailable,
   getOptimisticVersionIdsToDrop,
+  isFeedbackAttachmentAttemptFrozen,
   mergePieceVersions,
   resolveFinalizeFailure,
   resolveReviewMutationFailure,
@@ -118,5 +120,42 @@ assert.equal(
 );
 assert.equal(getFeedbackReferenceSlotsAvailable(9), 1);
 assert.equal(getFeedbackReferenceSlotsAvailable(10), 0);
+assert.equal(
+  isFeedbackAttachmentAttemptFrozen({
+    phase: "finalize-error",
+    uploaded: true,
+  }),
+  true,
+);
+assert.equal(
+  isFeedbackAttachmentAttemptFrozen({
+    phase: "finalizing",
+    uploaded: true,
+  }),
+  true,
+);
+assert.equal(
+  isFeedbackAttachmentAttemptFrozen({
+    phase: "uploaded",
+    uploaded: true,
+  }),
+  false,
+);
+assert.equal(
+  getFeedbackSubmitLabel({
+    isSubmitting: false,
+    phase: "finalize-error",
+    uploaded: true,
+  }),
+  "Reintentar",
+);
+assert.equal(
+  getFeedbackSubmitLabel({
+    isSubmitting: true,
+    phase: "uploading",
+    uploaded: false,
+  }),
+  "Subiendo referencias...",
+);
 
 console.log("piece version client state unit tests passed");

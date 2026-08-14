@@ -49,7 +49,9 @@ Las referencias visuales de feedback usan el flujo seguro:
 prepare -> PUT directo a R2 -> finalize
 ```
 
-Si falla `prepare` o el PUT, el cliente conserva texto y archivos seleccionados y descarta el attempt para volver a empezar. Si falla `finalize` por red o 5xx después de subir los objetos, el cliente conserva el `attemptToken` y reintenta solo finalize. Si aparece una nueva versión o la entrega se cierra entre prepare y finalize, el servidor responde `HISTORICAL_VERSION` o `DELIVERY_CLOSED`, no crea Feedback, y limpia best-effort los objetos R2 firmados por ese receipt.
+Si falla `prepare` o el PUT, el cliente conserva texto y archivos seleccionados y descarta el attempt para volver a empezar. Si falla `finalize` por red o 5xx después de subir los objetos, el cliente conserva el `attemptToken`, congela el texto y las referencias, muestra **Reintentar** y reintenta solo finalize. En ese estado, **Editar feedback** limpia best-effort el attempt técnico y vuelve a permitir cambios conservando el borrador y los previews locales. Si aparece una nueva versión o la entrega se cierra entre prepare y finalize, el servidor responde `HISTORICAL_VERSION` o `DELIVERY_CLOSED`, no crea Feedback, y limpia best-effort los objetos R2 firmados por ese receipt.
+
+Si el retry de `finalize` encuentra que el `Feedback` ya existe para ese receipt, debe reconocerlo como éxito idempotente antes de validar estado mutable de la entrega, última versión o existencia de objetos en R2. Esa aceptación solo aplica cuando usuario, pieza, versión, delivery, texto, fuente y referencias coinciden; cualquier diferencia responde conflicto.
 
 ## Journal
 

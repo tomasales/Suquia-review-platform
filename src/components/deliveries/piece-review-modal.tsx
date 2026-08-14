@@ -33,6 +33,7 @@ type PieceReviewModalProps = {
   isReviewSaving: boolean;
   onClose: () => void;
   onDraftChange: (value: string) => void;
+  onFeedbackAttemptEdit: () => void;
   onFeedbackReferenceRemove: (referenceId: string) => void;
   onFeedbackReferenceSelect: (files: FileList | File[]) => void;
   onFeedbackSubmit: () => void;
@@ -66,6 +67,7 @@ export function PieceReviewModal({
   isReviewSaving,
   onClose,
   onDraftChange,
+  onFeedbackAttemptEdit,
   onFeedbackReferenceRemove,
   onFeedbackReferenceSelect,
   onFeedbackSubmit,
@@ -231,6 +233,7 @@ export function PieceReviewModal({
               isReadOnly={isReadOnly}
               isReviewSaving={isReviewSaving}
               onDraftChange={onDraftChange}
+              onFeedbackAttemptEdit={onFeedbackAttemptEdit}
               onFeedbackReferenceRemove={onFeedbackReferenceRemove}
               onFeedbackReferenceSelect={onFeedbackReferenceSelect}
               onFeedbackSubmit={onFeedbackSubmit}
@@ -257,6 +260,7 @@ export function PieceReviewModal({
             isReadOnly={isReadOnly}
             isReviewSaving={isReviewSaving}
             onDraftChange={onDraftChange}
+            onFeedbackAttemptEdit={onFeedbackAttemptEdit}
             onFeedbackReferenceRemove={onFeedbackReferenceRemove}
             onFeedbackReferenceSelect={onFeedbackReferenceSelect}
             onFeedbackSubmit={onFeedbackSubmit}

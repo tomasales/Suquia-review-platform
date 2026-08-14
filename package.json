@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx src/lib/storage/storage.test.ts && tsx src/lib/delivery-creation.test.ts && tsx src/lib/delivery-upload-receipt.test.ts && tsx src/lib/drive/drive.test.ts && tsx src/lib/piece-review-rules.test.ts && tsx src/components/deliveries/piece-version-client-state.test.ts",
+    "test": "tsx src/lib/storage/storage.test.ts && tsx src/lib/delivery-creation.test.ts && tsx src/lib/delivery-upload-receipt.test.ts && tsx src/lib/drive/drive.test.ts && tsx src/lib/piece-review-rules.test.ts && tsx src/lib/piece-feedback-attempt-rules.test.ts && tsx src/components/deliveries/piece-version-client-state.test.ts",
     "typecheck": "next typegen && tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
