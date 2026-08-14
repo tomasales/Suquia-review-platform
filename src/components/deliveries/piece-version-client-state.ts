@@ -26,6 +26,21 @@ export type ReviewMutationFailureResolution = {
   title: string;
 };
 
+export const MAX_FEEDBACK_REFERENCES = 10;
+export const MAX_FEEDBACK_REFERENCE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+
+const allowedFeedbackReferenceMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+export type FeedbackReferenceFileIdentity = {
+  lastModified: number;
+  name: string;
+  size: number;
+};
+
 export function mergePieceVersions<TVersion extends VersionIdentity>(
   persisted: TVersion[],
   optimistic: TVersion[],
@@ -158,4 +173,33 @@ export function resolveReviewMutationFailure({
         ? "No pudimos guardar el feedback"
         : "No pudimos guardar la revisión",
   };
+}
+
+export function getFeedbackReferenceFileError(file: {
+  size: number;
+  type: string;
+}) {
+  if (!allowedFeedbackReferenceMimeTypes.has(file.type)) {
+    return "Tipo de archivo no compatible.";
+  }
+
+  if (file.size > MAX_FEEDBACK_REFERENCE_FILE_SIZE_BYTES) {
+    return "El archivo supera el máximo de 25 MB.";
+  }
+
+  if (file.size <= 0) {
+    return "El tamaño del archivo no es válido.";
+  }
+
+  return null;
+}
+
+export function getFeedbackReferenceIdentityKey(
+  file: FeedbackReferenceFileIdentity,
+) {
+  return `${file.name}-${file.size}-${file.lastModified}`;
+}
+
+export function getFeedbackReferenceSlotsAvailable(currentCount: number) {
+  return Math.max(0, MAX_FEEDBACK_REFERENCES - currentCount);
 }

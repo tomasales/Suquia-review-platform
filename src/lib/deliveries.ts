@@ -127,6 +127,23 @@ const deliveryDetailSelect = {
               createdAt: "asc",
             },
             select: {
+              attachments: {
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+                select: {
+                  createdAt: true,
+                  fileSizeBytes: true,
+                  id: true,
+                  mimeType: true,
+                  originalFilename: true,
+                  storageKey: true,
+                  uploadedBy: {
+                    select: {
+                      email: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
               id: true,
               body: true,
               createdAt: true,
@@ -402,13 +419,31 @@ async function toDeliveryDetail(delivery: DeliveryDetailRecord) {
               uploadedAtLabel: formatDeliveryDate(version.uploadedAt),
               uploaderLabel: version.uploadedBy.name ?? version.uploadedBy.email,
               imageSrc: readUrl,
-              feedback: version.feedback.map((item) => ({
-                id: item.id,
-                author: item.author.name ?? item.author.email,
-                body: item.body,
-                createdAtLabel: formatFeedbackDate(item.createdAt),
-                sourceType: item.sourceType,
-              })),
+              feedback: await Promise.all(
+                version.feedback.map(async (item) => ({
+                  id: item.id,
+                  author: item.author.name ?? item.author.email,
+                  body: item.body,
+                  createdAtLabel: formatFeedbackDate(item.createdAt),
+                  sourceType: item.sourceType,
+                  attachments: await Promise.all(
+                    item.attachments.map(async (attachment) => ({
+                      createdAtLabel: formatFeedbackDate(attachment.createdAt),
+                      fileSizeBytes: Number(attachment.fileSizeBytes),
+                      id: attachment.id,
+                      imageSrc: attachment.storageKey
+                        ? await createReadUrl(attachment.storageKey)
+                            .then((result) => result.readUrl)
+                            .catch(() => null)
+                        : null,
+                      mimeType: attachment.mimeType,
+                      originalFilename: attachment.originalFilename,
+                      uploadedByLabel:
+                        attachment.uploadedBy.name ?? attachment.uploadedBy.email,
+                    })),
+                  ),
+                })),
+              ),
               references: [],
               conversation: [],
             };
@@ -449,8 +484,34 @@ async function toDeliveryDetail(delivery: DeliveryDetailRecord) {
   return {
     ...listItem,
     generalNote: delivery.generalNote,
-    pieces,
+    pieces: pieces.map((piece) => ({
+      ...piece,
+      versions: piece.versions.map((version) => ({
+        ...version,
+        references: getReferencesFromFeedback(version.feedback),
+      })),
+    })),
   };
+}
+
+function getReferencesFromFeedback(
+  feedback: Array<{
+    attachments?: Array<{
+      id: string;
+      imageSrc: string | null;
+      originalFilename: string;
+    }>;
+    id: string;
+  }>,
+) {
+  return feedback.flatMap((item) =>
+    (item.attachments ?? []).map((attachment) => ({
+      feedbackId: item.id,
+      id: attachment.id,
+      imageSrc: attachment.imageSrc,
+      title: attachment.originalFilename,
+    })),
+  );
 }
 
 const feedbackDateFormatter = new Intl.DateTimeFormat("es-AR", {

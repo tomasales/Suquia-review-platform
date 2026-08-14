@@ -41,6 +41,16 @@ Las mutaciones de revisión y feedback guardan primero en PostgreSQL y registran
 
 Cuando un backup falla, cualquier refresh `PENDING` de esa misma Delivery queda absorbido por el `FAILED`. Esas operaciones pendientes son trabajo técnico no ejecutado; el retry manual del `FAILED` vuelve a leer PostgreSQL y respalda la snapshot canónica más reciente.
 
+## Referencias de feedback
+
+Las referencias visuales de feedback usan el flujo seguro:
+
+```text
+prepare -> PUT directo a R2 -> finalize
+```
+
+Si falla `prepare` o el PUT, el cliente conserva texto y archivos seleccionados y descarta el attempt para volver a empezar. Si falla `finalize` por red o 5xx después de subir los objetos, el cliente conserva el `attemptToken` y reintenta solo finalize. Si aparece una nueva versión o la entrega se cierra entre prepare y finalize, el servidor responde `HISTORICAL_VERSION` o `DELIVERY_CLOSED`, no crea Feedback, y limpia best-effort los objetos R2 firmados por ese receipt.
+
 ## Journal
 
 Registrar en Journal:
@@ -70,7 +80,7 @@ No implementar:
 
 - Qué errores son considerados graves para disparar email.
 - Cómo se representan internamente los borradores/pendientes técnicos.
-- Cómo limpiar objetos R2 preparados o subidos con keys definitivas cuando el navegador se cierra o el flujo no llega a finalizar en PostgreSQL.
+- Cómo limpiar objetos R2 preparados o subidos con keys definitivas cuando el navegador se cierra y no llega a llamar al endpoint de cleanup.
 
 ## Referencias cruzadas
 

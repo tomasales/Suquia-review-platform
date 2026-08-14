@@ -1,4 +1,5 @@
 import { Check, MessageSquare, Paperclip, RotateCcw, Upload, X } from "lucide-react";
+import Image from "next/image";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,12 +14,25 @@ type ReviewState = Piece["reviewState"];
 
 type PieceReviewPanelProps = {
   draft: string;
+  feedbackAttachmentUpload: {
+    error: string | null;
+    phase: string;
+    uploaded: boolean;
+  };
+  feedbackReferences: Array<{
+    error: string | null;
+    file: File;
+    id: string;
+    objectUrl: string;
+  }>;
   isFeedbackSubmitting: boolean;
   isLatestVersion: boolean;
   isMobileLayout?: boolean;
   isReadOnly: boolean;
   isReviewSaving: boolean;
   onDraftChange: (value: string) => void;
+  onFeedbackReferenceRemove: (referenceId: string) => void;
+  onFeedbackReferenceSelect: (files: FileList | File[]) => void;
   onFeedbackSubmit: () => void;
   onReviewStateChange: (reviewState: ReviewState) => void;
   onVersionFileCancel: () => void;
@@ -38,12 +52,16 @@ type PieceReviewPanelProps = {
 
 export function PieceReviewPanel({
   draft,
+  feedbackAttachmentUpload,
+  feedbackReferences,
   isFeedbackSubmitting,
   isLatestVersion,
   isReadOnly,
   isReviewSaving,
   isMobileLayout = false,
   onDraftChange,
+  onFeedbackReferenceRemove,
+  onFeedbackReferenceSelect,
   onFeedbackSubmit,
   onReviewStateChange,
   onVersionFileCancel,
@@ -61,6 +79,22 @@ export function PieceReviewPanel({
   const isFinalizeRetry = versionUpload.phase === "finalize-error";
   const isVersionUploadBlocked =
     versionUpload.isUploading || versionUpload.phase === "invalid";
+  const isFeedbackAttachmentActive =
+    feedbackAttachmentUpload.phase === "preparing" ||
+    feedbackAttachmentUpload.phase === "uploading" ||
+    feedbackAttachmentUpload.phase === "finalizing";
+  const hasInvalidFeedbackReferences = feedbackReferences.some(
+    (reference) => reference.error,
+  );
+  const feedbackSubmitLabel = isFeedbackSubmitting
+    ? feedbackAttachmentUpload.phase === "uploading"
+      ? "Subiendo referencias..."
+      : feedbackAttachmentUpload.phase === "finalizing"
+        ? "Guardando..."
+        : feedbackAttachmentUpload.phase === "finalize-error"
+          ? "Reintentar"
+          : "Enviando…"
+    : "Enviar feedback";
   const versionUploadLabel = versionUpload.isUploading
     ? versionUpload.phase === "finalizing"
       ? "Finalizando..."
@@ -206,6 +240,17 @@ export function PieceReviewPanel({
                   <p className="mt-1 break-words text-sm leading-6 text-muted-foreground">
                     {item.body}
                   </p>
+                  {item.attachments.length > 0 ? (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {item.attachments.map((attachment) => (
+                        <ReferenceThumb
+                          imageSrc={attachment.imageSrc}
+                          key={attachment.id}
+                          title={attachment.originalFilename}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>
@@ -227,25 +272,98 @@ export function PieceReviewPanel({
               }
               value={draft}
             />
+            {feedbackReferences.length > 0 ? (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {feedbackReferences.map((reference) => (
+                  <div
+                    className={`rounded-[8px] border p-2 ${
+                      reference.error
+                        ? "border-amber-300 bg-amber-50"
+                        : "border-border bg-surface-muted/25"
+                    }`}
+                    key={reference.id}
+                  >
+                    <div className="flex gap-2">
+                      <div className="relative size-14 shrink-0 overflow-hidden rounded-[6px] border border-border bg-surface">
+                        <Image
+                          alt={reference.file.name}
+                          className="h-full w-full object-cover"
+                          fill
+                          sizes="56px"
+                          src={reference.objectUrl}
+                          unoptimized
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-foreground">
+                          {reference.file.name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {formatFileSize(reference.file.size)}
+                        </p>
+                        {reference.error ? (
+                          <p className="mt-1 text-xs leading-4 text-amber-800">
+                            {reference.error}
+                          </p>
+                        ) : null}
+                      </div>
+                      <button
+                        aria-label="Quitar referencia"
+                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] border border-border text-muted-foreground disabled:opacity-45"
+                        disabled={isFeedbackAttachmentActive}
+                        onClick={() => onFeedbackReferenceRemove(reference.id)}
+                        type="button"
+                      >
+                        <X className="size-3.5" strokeWidth={1.8} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {feedbackAttachmentUpload.error ? (
+              <p className="mt-2 text-xs leading-5 text-amber-800">
+                {feedbackAttachmentUpload.error}
+              </p>
+            ) : null}
             <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <Button
-                className="justify-start text-muted-foreground"
-                disabled
-                size="sm"
-                variant="secondary"
+              <input
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                id={`feedback-reference-upload-${selectedVersion.id}-${isMobileLayout ? "mobile" : "desktop"}`}
+                multiple
+                onChange={(event) => {
+                  if (event.currentTarget.files) {
+                    onFeedbackReferenceSelect(event.currentTarget.files);
+                  }
+                  event.currentTarget.value = "";
+                }}
+                type="file"
+              />
+              <label
+                aria-disabled={isInteractionDisabled || isFeedbackSubmitting}
+                className={`inline-flex min-h-9 cursor-pointer items-center justify-start rounded-[8px] border border-border px-3 text-sm font-medium transition-colors ${
+                  isInteractionDisabled || isFeedbackSubmitting
+                    ? "pointer-events-none opacity-50"
+                    : "text-muted-foreground hover:bg-surface-muted"
+                }`}
+                htmlFor={`feedback-reference-upload-${selectedVersion.id}-${isMobileLayout ? "mobile" : "desktop"}`}
               >
                 <Paperclip className="mr-1.5 size-4" strokeWidth={1.8} />
                 Adjuntar referencia
-              </Button>
+              </label>
               <Button
                 disabled={
-                  isInteractionDisabled || isFeedbackSubmitting || !draft.trim()
+                  isInteractionDisabled ||
+                  isFeedbackSubmitting ||
+                  hasInvalidFeedbackReferences ||
+                  !draft.trim()
                 }
                 onClick={onFeedbackSubmit}
                 size="sm"
                 variant="primary"
               >
-                {isFeedbackSubmitting ? "Enviando…" : "Enviar feedback"}
+                {feedbackSubmitLabel}
               </Button>
             </div>
           </div>
@@ -257,11 +375,9 @@ export function PieceReviewPanel({
             <div className="mt-3 grid grid-cols-2 gap-2">
               {selectedVersion.references.map((reference) => (
                 <div key={reference.id}>
-                  <PiecePreview
-                    aspect="feed"
+                  <ReferenceThumb
                     imageSrc={reference.imageSrc}
-                    label={reference.title}
-                    mode="reference"
+                    title={reference.title}
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
                     {reference.title}
@@ -455,4 +571,24 @@ function formatFileSize(bytes: number) {
   }
 
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function ReferenceThumb({
+  imageSrc,
+  title,
+}: {
+  imageSrc: string | null;
+  title: string;
+}) {
+  const content = (
+    <PiecePreview aspect="feed" imageSrc={imageSrc} label={title} mode="reference" />
+  );
+
+  return imageSrc ? (
+    <a href={imageSrc} rel="noreferrer" target="_blank">
+      {content}
+    </a>
+  ) : (
+    content
+  );
 }

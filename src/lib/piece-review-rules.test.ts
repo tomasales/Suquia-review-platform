@@ -107,12 +107,15 @@ assert.equal(getFeedbackSourceType(true), FeedbackSourceType.TOMI);
 assert.equal(getFeedbackSourceType(false), FeedbackSourceType.OTHER);
 
 const feedbackMetadata = buildFeedbackJournalMetadata({
+  attachmentIds: ["attachment-1"],
   pieceId: "piece-1",
   pieceVersionId: "version-1",
   sourceType: FeedbackSourceType.TOMI,
 });
 
 assert.deepEqual(feedbackMetadata, {
+  attachmentCount: 1,
+  attachmentIds: ["attachment-1"],
   level: "PIECE",
   pieceId: "piece-1",
   pieceVersionId: "version-1",

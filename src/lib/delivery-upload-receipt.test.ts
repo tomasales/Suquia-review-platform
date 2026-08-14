@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import {
   assertDeliveryUploadReceiptUser,
   createDeliveryUploadReceipt,
+  createPieceFeedbackAttachmentsReceipt,
   createPieceVersionUploadReceipt,
   DELIVERY_UPLOAD_RECEIPT_EXPIRES_IN_SECONDS,
   verifyDeliveryUploadReceipt,
+  verifyPieceFeedbackAttachmentsReceipt,
   verifyPieceVersionUploadReceipt,
 } from "./delivery-upload-receipt";
 import { StorageValidationError } from "./storage/errors";
@@ -114,6 +116,66 @@ assertThrowsStorageValidation(() =>
 );
 assertThrowsStorageValidation(() =>
   verifyPieceVersionUploadReceipt(token, { now, secret }),
+);
+
+const feedbackAttachmentsToken = createPieceFeedbackAttachmentsReceipt(
+  {
+    attachments: [
+      {
+        fileSizeBytes: 1024,
+        filename: "ref.png",
+        id: "attachment-1",
+        mimeType: "image/png",
+        storageKey:
+          "deliveries/delivery-1/pieces/piece-1/v1/feedback/feedback-1/references/attachment-1-ref.png",
+      },
+    ],
+    deliveryId: "delivery-1",
+    feedbackId: "feedback-1",
+    pieceId: "piece-1",
+    pieceVersionId: "version-1",
+    userId: "user-1",
+  },
+  { now, secret },
+);
+const verifiedFeedbackAttachmentsPayload =
+  verifyPieceFeedbackAttachmentsReceipt(feedbackAttachmentsToken, {
+    now,
+    secret,
+  });
+
+assert.equal(
+  verifiedFeedbackAttachmentsPayload.kind,
+  "piece-feedback-attachments",
+);
+assert.equal(verifiedFeedbackAttachmentsPayload.feedbackId, "feedback-1");
+assert.equal(verifiedFeedbackAttachmentsPayload.attachments[0]?.id, "attachment-1");
+assert.equal(
+  verifiedFeedbackAttachmentsPayload.attachments[0]?.storageKey,
+  "deliveries/delivery-1/pieces/piece-1/v1/feedback/feedback-1/references/attachment-1-ref.png",
+);
+assert.doesNotThrow(() =>
+  assertDeliveryUploadReceiptUser(verifiedFeedbackAttachmentsPayload, "user-1"),
+);
+assertThrowsStorageValidation(() =>
+  assertDeliveryUploadReceiptUser(
+    verifiedFeedbackAttachmentsPayload,
+    "another-user",
+  ),
+);
+assertThrowsStorageValidation(() =>
+  verifyPieceFeedbackAttachmentsReceipt(feedbackAttachmentsToken, {
+    now: new Date(
+      now.getTime() + (DELIVERY_UPLOAD_RECEIPT_EXPIRES_IN_SECONDS + 1) * 1000,
+    ),
+    secret,
+  }),
+);
+assertThrowsStorageValidation(() =>
+  verifyDeliveryUploadReceipt(feedbackAttachmentsToken, { now, secret }),
+);
+assertThrowsStorageValidation(() =>
+  verifyPieceVersionUploadReceipt(feedbackAttachmentsToken, { now, secret }),
 );
 
 console.log("delivery upload receipt unit tests passed");

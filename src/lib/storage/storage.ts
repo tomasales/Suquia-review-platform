@@ -65,18 +65,20 @@ export async function createUploadUrlForStorageKey({
   fileSizeBytes,
   filename,
   mimeType,
+  purpose = "piece-version",
   storageKey,
 }: {
   fileSizeBytes: number;
   filename: string;
   mimeType: string;
+  purpose?: UploadUrlInput["purpose"];
   storageKey: string;
 }) {
   validateUploadUrlInput({
     fileSizeBytes,
     filename,
     mimeType,
-    purpose: "piece-version",
+    purpose,
   });
   assertValidStorageKey(storageKey);
 

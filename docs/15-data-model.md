@@ -116,6 +116,8 @@ Solo feedback cuyo autor tenga `isAiLearningSource=true` puede alimentar criteri
 - **Canónico**: DB para metadata; archivo operativo según almacenamiento; backup en Drive.
 - **Reconstruible desde Drive**: sí, si manifest referencia el archivo.
 
+En MVP `FeedbackAttachment` se usa para imágenes de referencia asociadas a feedback de pieza. No existe una entidad paralela de `Reference`. El archivo vive en R2 privado y se sube con receipt firmado; Drive guarda un backup bajo la carpeta de la `PieceVersion` correspondiente.
+
 ## ConversationReply
 
 - **Propósito**: respuestas/conversación asociada a un feedback.

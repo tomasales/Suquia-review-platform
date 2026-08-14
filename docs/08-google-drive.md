@@ -57,6 +57,20 @@ No se debe depender de inferir información solamente mirando nombres de archivo
 
 El manifest registra el estado actual de cada pieza como `currentReviewState`, derivado de la última `PieceVersion`, y conserva el `reviewState` propio de cada versión en su historial.
 
+Desde la incorporación de referencias visuales de feedback, el manifest usa `schemaVersion: 3`. Incluye `feedback[].attachmentIds` y una colección top-level `attachments` con metadata de `FeedbackAttachment`, `driveFileId`, `relativePath`, tipo MIME, tamaño y usuario uploader. No incluye signed URLs ni secretos.
+
+Las referencias se respaldan dentro de la carpeta de la versión correspondiente:
+
+```text
+Vn-<pieceVersionId>/
+  feedback.jsonl
+  references/
+    <feedbackId>/
+      <attachmentId>-<filename>
+```
+
+Cada archivo de referencia usa `appProperties` estables con entidad `feedback-attachment`, el ID de Delivery, Feedback y PieceVersion.
+
 ## Eliminación y backup
 
 Eliminar una entrega de la plataforma no debe borrar el backup en Google Drive.

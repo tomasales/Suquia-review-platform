@@ -17,6 +17,18 @@ export async function getDeliveryBackupSnapshot(deliveryId: string) {
       },
       feedback: {
         include: {
+          attachments: {
+            include: {
+              uploadedBy: {
+                select: {
+                  email: true,
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          },
           author: {
             select: {
               email: true,
@@ -84,6 +96,18 @@ export async function getDeliveryBackupSnapshot(deliveryId: string) {
       updatedAt: delivery.updatedAt,
     },
     feedback: delivery.feedback.map((feedback) => ({
+      attachments: feedback.attachments.map((attachment) => ({
+        createdAt: attachment.createdAt,
+        driveFileId: attachment.driveFileId,
+        feedbackId: attachment.feedbackId,
+        fileSizeBytes: attachment.fileSizeBytes,
+        id: attachment.id,
+        mimeType: attachment.mimeType,
+        originalFilename: attachment.originalFilename,
+        storageKey: attachment.storageKey,
+        uploadedBy: attachment.uploadedBy,
+        uploadedByUserId: attachment.uploadedByUserId,
+      })),
       author: feedback.author,
       authorUserId: feedback.authorUserId,
       body: feedback.body,

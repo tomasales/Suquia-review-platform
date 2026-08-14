@@ -143,15 +143,19 @@ export function buildPieceReviewJournalMetadata({
 }
 
 export function buildFeedbackJournalMetadata({
+  attachmentIds = [],
   pieceId,
   pieceVersionId,
   sourceType,
 }: {
+  attachmentIds?: string[];
   pieceId: string;
   pieceVersionId: string;
   sourceType: FeedbackSourceType;
 }) {
   return {
+    attachmentCount: attachmentIds.length,
+    attachmentIds,
     level: "PIECE",
     pieceId,
     pieceVersionId,

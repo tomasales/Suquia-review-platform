@@ -70,9 +70,12 @@ El nombre visible puede incluir el título generado para lectura humana, pero el
         /V1-<pieceVersionId>
           original-file
           feedback.jsonl
+          /references
+            /<feedbackId>
+              <attachmentId>-<filename>
 ```
 
-El motor inicial crea `feedback.jsonl` únicamente cuando esa versión tiene feedback real. No crea todavía `feedback-general.jsonl`, referencias, V2 ni carpetas vacías para features futuras. La convención final de nombres sigue pendiente. La arquitectura exige que los IDs inmutables estén en manifest.
+El motor inicial crea `feedback.jsonl` únicamente cuando esa versión tiene feedback real. Las referencias visuales reales se guardan como `FeedbackAttachment` bajo la versión y feedback correspondientes. No crea todavía `feedback-general.jsonl` ni carpetas vacías para features futuras. La convención final de nombres sigue pendiente. La arquitectura exige que los IDs inmutables estén en manifest.
 
 ## Storage operativo y uploads
 
@@ -155,6 +158,7 @@ Identidades principales:
 - Manifest: `suquiaEntityType=delivery-manifest`, `suquiaEntityId=<deliveryId>`.
 - Journal: `suquiaEntityType=delivery-journal`, `suquiaEntityId=<deliveryId>`.
 - Feedback por versión: `suquiaEntityType=piece-version-feedback`, `suquiaEntityId=<pieceVersionId>`, `suquiaDeliveryId=<deliveryId>`.
+- Attachment de feedback: `suquiaEntityType=feedback-attachment`, `suquiaEntityId=<attachmentId>`, `suquiaDeliveryId=<deliveryId>`, `suquiaFeedbackId=<feedbackId>`, `suquiaPieceVersionId=<pieceVersionId>`.
 
 Los IDs se persisten progresivamente en PostgreSQL:
 
@@ -162,6 +166,7 @@ Los IDs se persisten progresivamente en PostgreSQL:
 - `Delivery.driveManifestFileId`;
 - `PieceVersion.driveFolderId`;
 - `PieceVersion.driveFileId`.
+- `FeedbackAttachment.driveFileId`.
 
 Esto permite reintentos manuales sin duplicar carpetas ni assets.
 
@@ -173,7 +178,7 @@ Schema conceptual:
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "delivery": {
     "id": "immutable-delivery-id",
     "type": "STORIES",
@@ -226,16 +231,20 @@ Schema conceptual:
       "body": "...",
       "createdAt": "...",
       "updatedAt": "...",
-      "attachmentIds": []
+      "attachmentIds": ["..."]
     }
   ],
   "attachments": [
     {
       "id": "...",
       "feedbackId": "...",
+      "uploadedByUserId": "...",
+      "originalFilename": "...",
       "driveFileId": "...",
       "relativePath": "...",
-      "mimeType": "image/png"
+      "mimeType": "image/png",
+      "fileSizeBytes": 123,
+      "createdAt": "..."
     }
   ],
   "journal": {
@@ -271,6 +280,8 @@ Si una operación `SYNCING` falla, cualquier `PENDING` de la misma Delivery qued
 Si un retry manual pasa de `FAILED` a `SYNCING` y durante ese intento se crea una nueva `PENDING`, el resultado depende del intento: si termina `SYNCED`, se conserva cualquier `PENDING` creada después del inicio del intento; si vuelve a fallar, esa `PENDING` queda absorbida por el nuevo `FAILED`.
 
 El processor actualiza `metadata.json`, `manifest.json`, `journal.jsonl` y los `feedback.jsonl` por versión. Los assets originales se crean con identidad estable y no se vuelven a subir si `PieceVersion.driveFileId` sigue existiendo.
+
+Cada línea de `feedback.jsonl` incluye `attachmentIds`. La metadata completa de archivos vive en `manifest.attachments` para evitar duplicación.
 
 ## deleted_entries.json
 

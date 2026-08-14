@@ -14,6 +14,17 @@ type ReviewState = Piece["reviewState"];
 
 type PieceReviewModalProps = {
   draft: string;
+  feedbackAttachmentUpload: {
+    error: string | null;
+    phase: string;
+    uploaded: boolean;
+  };
+  feedbackReferences: Array<{
+    error: string | null;
+    file: File;
+    id: string;
+    objectUrl: string;
+  }>;
   hasNext: boolean;
   hasPrevious: boolean;
   isFeedbackSubmitting: boolean;
@@ -22,6 +33,8 @@ type PieceReviewModalProps = {
   isReviewSaving: boolean;
   onClose: () => void;
   onDraftChange: (value: string) => void;
+  onFeedbackReferenceRemove: (referenceId: string) => void;
+  onFeedbackReferenceSelect: (files: FileList | File[]) => void;
   onFeedbackSubmit: () => void;
   onNext: () => void;
   onPrevious: () => void;
@@ -43,6 +56,8 @@ type PieceReviewModalProps = {
 
 export function PieceReviewModal({
   draft,
+  feedbackAttachmentUpload,
+  feedbackReferences,
   hasNext,
   hasPrevious,
   isFeedbackSubmitting,
@@ -51,6 +66,8 @@ export function PieceReviewModal({
   isReviewSaving,
   onClose,
   onDraftChange,
+  onFeedbackReferenceRemove,
+  onFeedbackReferenceSelect,
   onFeedbackSubmit,
   onNext,
   onPrevious,
@@ -206,12 +223,16 @@ export function PieceReviewModal({
           <div className="md:hidden">
             <PieceReviewPanel
               draft={draft}
+              feedbackAttachmentUpload={feedbackAttachmentUpload}
+              feedbackReferences={feedbackReferences}
               isFeedbackSubmitting={isFeedbackSubmitting}
               isLatestVersion={isLatestVersion}
               isMobileLayout
               isReadOnly={isReadOnly}
               isReviewSaving={isReviewSaving}
               onDraftChange={onDraftChange}
+              onFeedbackReferenceRemove={onFeedbackReferenceRemove}
+              onFeedbackReferenceSelect={onFeedbackReferenceSelect}
               onFeedbackSubmit={onFeedbackSubmit}
               onReviewStateChange={onReviewStateChange}
               onVersionFileCancel={onVersionFileCancel}
@@ -229,11 +250,15 @@ export function PieceReviewModal({
         <div className="hidden min-h-0 md:block">
           <PieceReviewPanel
             draft={draft}
+            feedbackAttachmentUpload={feedbackAttachmentUpload}
+            feedbackReferences={feedbackReferences}
             isFeedbackSubmitting={isFeedbackSubmitting}
             isLatestVersion={isLatestVersion}
             isReadOnly={isReadOnly}
             isReviewSaving={isReviewSaving}
             onDraftChange={onDraftChange}
+            onFeedbackReferenceRemove={onFeedbackReferenceRemove}
+            onFeedbackReferenceSelect={onFeedbackReferenceSelect}
             onFeedbackSubmit={onFeedbackSubmit}
             onReviewStateChange={onReviewStateChange}
             onVersionFileCancel={onVersionFileCancel}

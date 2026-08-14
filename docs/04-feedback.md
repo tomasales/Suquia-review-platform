@@ -41,13 +41,21 @@ El backup de Drive exporta el feedback real dentro del `manifest.json` de la ent
 
 ## Referencias visuales
 
-Las imágenes de referencia pueden adjuntarse al feedback de una pieza y deben conservarse asociadas a la versión correspondiente cuando aplique.
+Las imágenes de referencia se implementan en MVP como `FeedbackAttachment` reales de un feedback de pieza.
+
+Reglas:
+
+- El texto del feedback sigue siendo obligatorio.
+- Un feedback puede tener de 0 a 10 referencias.
+- Los formatos permitidos son `image/jpeg`, `image/png` e `image/webp`.
+- El tamaño máximo es 25 MB por referencia.
+- Las referencias quedan asociadas al `Feedback` concreto y, por transitividad, a la `PieceVersion` donde ese feedback fue creado.
+- Las referencias históricas permanecen visibles al navegar versiones anteriores.
+- Solo la última `PieceVersion` acepta feedback nuevo y referencias nuevas.
+- No se implementan pins, coordenadas ni galería avanzada en MVP.
 
 ## Pendiente de definición
 
-- Formatos de archivo admitidos para referencias.
-- Límites de tamaño de archivos.
-- Adjuntos de referencia reales.
 - Respuestas/conversación sobre un feedback.
 - Feedback general a nivel entrega.
 

@@ -58,7 +58,21 @@ export type BackupJournalEvent = {
   metadata: unknown;
 };
 
+export type BackupFeedbackAttachment = {
+  createdAt: Date;
+  driveFileId: string | null;
+  feedbackId: string;
+  fileSizeBytes: bigint;
+  id: string;
+  mimeType: string;
+  originalFilename: string;
+  storageKey: string | null;
+  uploadedBy: BackupUser;
+  uploadedByUserId: string;
+};
+
 export type BackupFeedback = {
+  attachments: BackupFeedbackAttachment[];
   author: BackupUser;
   authorUserId: string;
   body: string;
@@ -98,6 +112,7 @@ export type ManifestDriveIds = {
   manifestFileId: string | null;
   versionFileIds?: Map<string, string>;
   versionFolderIds?: Map<string, string>;
+  feedbackAttachmentFileIds?: Map<string, string>;
 };
 
 export function buildDeliveryFolderAppProperties(
@@ -179,6 +194,26 @@ export function buildPieceVersionFeedbackAppProperties({
   };
 }
 
+export function buildFeedbackAttachmentAppProperties({
+  deliveryId,
+  feedbackId,
+  pieceVersionId,
+  attachmentId,
+}: {
+  attachmentId: string;
+  deliveryId: string;
+  feedbackId: string;
+  pieceVersionId: string;
+}): DriveAppProperties {
+  return {
+    suquiaDeliveryId: deliveryId,
+    suquiaEntityId: attachmentId,
+    suquiaEntityType: "feedback-attachment",
+    suquiaFeedbackId: feedbackId,
+    suquiaPieceVersionId: pieceVersionId,
+  };
+}
+
 export function buildDeliveryManifestAppProperties(
   deliveryId: string,
 ): DriveAppProperties {
@@ -251,6 +286,23 @@ export function getPieceVersionAssetRelativePath({
   }`;
 }
 
+export function getFeedbackAttachmentRelativePath({
+  attachment,
+  feedback,
+  piece,
+  version,
+}: {
+  attachment: { id: string; originalFilename: string };
+  feedback: { id: string };
+  piece: { id: string; position: number };
+  version: { id: string; versionNumber: number };
+}) {
+  return `${getPieceVersionFolderRelativePath({
+    piece,
+    version,
+  })}/references/${feedback.id}/${attachment.id}-${attachment.originalFilename}`;
+}
+
 export function buildPieceMetadata({
   driveIds,
   piece,
@@ -293,7 +345,7 @@ export function buildDeliveryManifest({
   snapshot: DeliveryBackupSnapshot;
 }) {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     delivery: {
       createdAt: snapshot.delivery.createdAt.toISOString(),
       createdByUserId: snapshot.delivery.createdByUserId,
@@ -338,7 +390,7 @@ export function buildDeliveryManifest({
       })),
     })),
     feedback: snapshot.feedback.map((feedback) => ({
-      attachmentIds: [],
+      attachmentIds: feedback.attachments.map((attachment) => attachment.id),
       authorUserId: feedback.authorUserId,
       body: feedback.body,
       createdAt: feedback.createdAt.toISOString(),
@@ -350,7 +402,37 @@ export function buildDeliveryManifest({
       sourceType: feedback.sourceType,
       updatedAt: feedback.updatedAt.toISOString(),
     })),
-    attachments: [],
+    attachments: snapshot.feedback.flatMap((feedback) =>
+      feedback.attachments.map((attachment) => {
+        const piece = snapshot.pieces.find((item) => item.id === feedback.pieceId);
+        const version = piece?.versions.find(
+          (item) => item.id === feedback.pieceVersionId,
+        );
+
+        return {
+          createdAt: attachment.createdAt.toISOString(),
+          driveFileId:
+            driveIds.feedbackAttachmentFileIds?.get(attachment.id) ??
+            attachment.driveFileId,
+          feedbackId: attachment.feedbackId,
+          fileSizeBytes: Number(attachment.fileSizeBytes),
+          id: attachment.id,
+          mimeType: attachment.mimeType,
+          originalFilename: attachment.originalFilename,
+          relativePath:
+            piece && version
+              ? getFeedbackAttachmentRelativePath({
+                  attachment,
+                  feedback,
+                  piece,
+                  version,
+                })
+              : null,
+          storageKey: attachment.storageKey,
+          uploadedByUserId: attachment.uploadedByUserId,
+        };
+      }),
+    ),
     journal: {
       driveFileId: driveIds.journalFileId,
       format: "jsonl",
@@ -390,6 +472,7 @@ export function serializeVersionFeedbackJsonl(feedbackItems: BackupFeedback[]) {
     .map((feedback) =>
       JSON.stringify({
         authorUserId: feedback.authorUserId,
+        attachmentIds: feedback.attachments.map((attachment) => attachment.id),
         body: feedback.body,
         createdAt: feedback.createdAt.toISOString(),
         id: feedback.id,
@@ -423,6 +506,10 @@ function collectManifestUsers(snapshot: DeliveryBackupSnapshot) {
 
   for (const feedback of snapshot.feedback) {
     users.set(feedback.author.id, feedback.author);
+
+    for (const attachment of feedback.attachments) {
+      users.set(attachment.uploadedBy.id, attachment.uploadedBy);
+    }
   }
 
   return Array.from(users.values()).sort((a, b) => a.id.localeCompare(b.id));

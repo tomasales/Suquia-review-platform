@@ -78,10 +78,14 @@ assert.match(
 
 assert.match(
   buildFeedbackAttachmentStorageKey({
+    attachmentId: "attachment-1",
+    deliveryId: "delivery-1",
     feedbackId: "feedback-1",
     filename: "ref.webp",
+    pieceId: "piece-1",
+    versionNumber: 2,
   }),
-  /^feedback\/feedback-1\/attachments\/.+-ref.webp$/,
+  /^deliveries\/delivery-1\/pieces\/piece-1\/v2\/feedback\/feedback-1\/references\/attachment-1-ref.webp$/,
 );
 
 assert.match(

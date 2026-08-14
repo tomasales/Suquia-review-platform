@@ -139,6 +139,15 @@ export type VisualReviewReference = {
 };
 
 export type VisualReviewFeedbackItem = {
+  attachments: Array<{
+    createdAtLabel: string;
+    fileSizeBytes: number;
+    id: string;
+    imageSrc: string | null;
+    mimeType: string;
+    originalFilename: string;
+    uploadedByLabel: string;
+  }>;
   id: string;
   author: string;
   body: string;
@@ -308,13 +317,31 @@ function version(
     conversation?: VisualReviewConversationItem[];
   },
 ): VisualReviewVersionData {
+  const feedbackItems = data.feedback ?? [];
+  const references = data.references ?? [];
+
+  if (feedbackItems[0] && references.length > 0) {
+    feedbackItems[0] = {
+      ...feedbackItems[0],
+      attachments: references.map((item) => ({
+        createdAtLabel: feedbackItems[0]?.createdAtLabel ?? "Hoy",
+        fileSizeBytes: 128000,
+        id: item.id,
+        imageSrc: item.imageSrc,
+        mimeType: "image/svg+xml",
+        originalFilename: item.title,
+        uploadedByLabel: "Tomi Preview",
+      })),
+    };
+  }
+
   return {
     id: `${fileName.replace(/\.[^.]+$/, "")}-${versionNumber}`,
     versionNumber,
     uploadedAtLabel,
     imageSrc: `/visual-review/${fileName}`,
-    feedback: data.feedback ?? [],
-    references: data.references ?? [],
+    feedback: feedbackItems,
+    references,
     conversation: data.conversation ?? [],
   };
 }
@@ -325,6 +352,7 @@ function feedback(
   createdAtLabel: string,
 ): VisualReviewFeedbackItem {
   return {
+    attachments: [],
     id,
     author: "Tomi Preview",
     body,

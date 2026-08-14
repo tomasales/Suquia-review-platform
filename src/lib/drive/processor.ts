@@ -10,6 +10,7 @@ import {
   buildDeliveryJournalAppProperties,
   buildDeliveryManifest,
   buildDeliveryManifestAppProperties,
+  buildFeedbackAttachmentAppProperties,
   buildPieceFolderAppProperties,
   buildPieceMetadata,
   buildPieceVersionAssetAppProperties,
@@ -242,6 +243,7 @@ async function backupDeliveryToDrive(deliveryId: string) {
 
   const driveIds: ManifestDriveIds = {
     deliveryFolderId: deliveryFolder.id,
+    feedbackAttachmentFileIds: new Map(),
     journalFileId: null,
     manifestFileId: snapshot.delivery.driveManifestFileId,
     versionFileIds: new Map(),
@@ -345,6 +347,14 @@ async function backupDeliveryToDrive(deliveryId: string) {
           parentId: versionFolder.id,
         });
       }
+
+      await backupFeedbackAttachments({
+        deliveryId,
+        driveIds,
+        parentVersionFolderId: versionFolder.id,
+        pieceVersionId: version.id,
+        versionFeedback,
+      });
     }
 
     await createOrUpdateTextFile({
@@ -410,6 +420,87 @@ async function backupDeliveryToDrive(deliveryId: string) {
     deliveryFolderId: deliveryFolder.id,
     manifestFileId: initialManifestFile.id,
   };
+}
+
+async function backupFeedbackAttachments({
+  deliveryId,
+  driveIds,
+  parentVersionFolderId,
+  pieceVersionId,
+  versionFeedback,
+}: {
+  deliveryId: string;
+  driveIds: ManifestDriveIds;
+  parentVersionFolderId: string;
+  pieceVersionId: string;
+  versionFeedback: BackupFeedback[];
+}) {
+  const feedbackWithAttachments = versionFeedback.filter(
+    (feedback) => feedback.attachments.length > 0,
+  );
+
+  if (feedbackWithAttachments.length === 0) {
+    return;
+  }
+
+  const referencesFolder = await findOrCreateDriveFolder({
+    appProperties: {
+      suquiaDeliveryId: deliveryId,
+      suquiaEntityId: pieceVersionId,
+      suquiaEntityType: "piece-version-references",
+    },
+    name: "references",
+    parentId: parentVersionFolderId,
+  });
+
+  for (const feedback of feedbackWithAttachments) {
+    const feedbackFolder = await findOrCreateDriveFolder({
+      appProperties: {
+        suquiaDeliveryId: deliveryId,
+        suquiaEntityId: feedback.id,
+        suquiaEntityType: "feedback-references",
+        suquiaPieceVersionId: pieceVersionId,
+      },
+      name: feedback.id,
+      parentId: referencesFolder.id,
+    });
+
+    for (const attachment of feedback.attachments) {
+      if (!attachment.storageKey) {
+        throw new DriveOperationError(
+          "La referencia de feedback no tiene storageKey para backup.",
+          { code: "DRIVE_FEEDBACK_ATTACHMENT_MISSING_STORAGE_KEY" },
+        );
+      }
+
+      const file = await createStreamFileIfMissing({
+        appProperties: buildFeedbackAttachmentAppProperties({
+          attachmentId: attachment.id,
+          deliveryId,
+          feedbackId: feedback.id,
+          pieceVersionId,
+        }),
+        body: await getObjectStream(attachment.storageKey),
+        knownFileId: attachment.driveFileId,
+        mimeType: attachment.mimeType,
+        name: `${attachment.id}-${attachment.originalFilename}`,
+        parentId: feedbackFolder.id,
+      });
+
+      driveIds.feedbackAttachmentFileIds?.set(attachment.id, file.id);
+
+      if (attachment.driveFileId !== file.id) {
+        await db.feedbackAttachment.update({
+          data: {
+            driveFileId: file.id,
+          },
+          where: {
+            id: attachment.id,
+          },
+        });
+      }
+    }
+  }
 }
 
 function getFeedbackForVersion(

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
 import {
+  getFeedbackReferenceFileError,
+  getFeedbackReferenceIdentityKey,
+  getFeedbackReferenceSlotsAvailable,
   getOptimisticVersionIdsToDrop,
   mergePieceVersions,
   resolveFinalizeFailure,
@@ -97,5 +100,23 @@ assert.equal(
   }).title,
   "No pudimos guardar el feedback",
 );
+assert.equal(
+  getFeedbackReferenceIdentityKey({
+    lastModified: 123,
+    name: "ref.png",
+    size: 456,
+  }),
+  "ref.png-456-123",
+);
+assert.equal(
+  getFeedbackReferenceFileError({ size: 1024, type: "image/png" }),
+  null,
+);
+assert.equal(
+  getFeedbackReferenceFileError({ size: 1024, type: "image/gif" }),
+  "Tipo de archivo no compatible.",
+);
+assert.equal(getFeedbackReferenceSlotsAvailable(9), 1);
+assert.equal(getFeedbackReferenceSlotsAvailable(10), 0);
 
 console.log("piece version client state unit tests passed");

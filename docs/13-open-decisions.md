@@ -12,8 +12,7 @@ Este documento concentra decisiones abiertas. No resolver estos puntos sin defin
 
 ## Archivos y contenido
 
-- Formatos de archivo admitidos.
-- Límites de tamaño de archivos.
+- Formatos de archivo admitidos y límites para otros tipos de adjuntos futuros. En MVP las referencias visuales de feedback admiten `image/jpeg`, `image/png` e `image/webp`, hasta 25 MB por archivo y máximo 10 referencias por feedback.
 - Comportamiento exacto de gestión/subida/reemplazo de Guidelines.
 - Convención final de nombres de carpetas/archivos en Drive.
 

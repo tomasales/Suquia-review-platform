@@ -7,6 +7,7 @@ import {
   buildDeliveryJournalAppProperties,
   buildDeliveryManifest,
   buildDeliveryManifestAppProperties,
+  buildFeedbackAttachmentAppProperties,
   buildPieceFolderAppProperties,
   buildPieceMetadata,
   buildPieceVersionAssetAppProperties,
@@ -14,6 +15,7 @@ import {
   buildPieceVersionFolderAppProperties,
   getDeliveryFolderName,
   getPieceFolderName,
+  getFeedbackAttachmentRelativePath,
   getPieceVersionAssetRelativePath,
   getPieceVersionFolderName,
   serializeJournalJsonl,
@@ -68,6 +70,21 @@ const snapshot: DeliveryBackupSnapshot = {
   },
   feedback: [
     {
+      attachments: [
+        {
+          createdAt: new Date("2026-08-13T12:11:00.000Z"),
+          driveFileId: null,
+          feedbackId: "feedback-2",
+          fileSizeBytes: BigInt(1024),
+          id: "attachment-1",
+          mimeType: "image/png",
+          originalFilename: "ref.png",
+          storageKey:
+            "deliveries/delivery-1/pieces/piece-1/v1/feedback/feedback-2/references/attachment-1-ref.png",
+          uploadedBy: user,
+          uploadedByUserId: user.id,
+        },
+      ],
       author: feedbackAuthor,
       authorUserId: feedbackAuthor.id,
       body: "Ajustar el CTA y mantener el fondo.",
@@ -81,6 +98,7 @@ const snapshot: DeliveryBackupSnapshot = {
       updatedAt: new Date("2026-08-13T12:10:05.000Z"),
     },
     {
+      attachments: [],
       author: user,
       authorUserId: user.id,
       body: "OK para publicar.",
@@ -186,6 +204,21 @@ assert.deepEqual(
     suquiaEntityType: "piece-version-feedback",
   },
 );
+assert.deepEqual(
+  buildFeedbackAttachmentAppProperties({
+    attachmentId: "attachment-1",
+    deliveryId: "delivery-1",
+    feedbackId: "feedback-2",
+    pieceVersionId: "version-1",
+  }),
+  {
+    suquiaDeliveryId: "delivery-1",
+    suquiaEntityId: "attachment-1",
+    suquiaEntityType: "feedback-attachment",
+    suquiaFeedbackId: "feedback-2",
+    suquiaPieceVersionId: "version-1",
+  },
+);
 assert.deepEqual(buildDeliveryManifestAppProperties("delivery-1"), {
   suquiaEntityId: "delivery-1",
   suquiaEntityType: "delivery-manifest",
@@ -208,11 +241,21 @@ assert.equal(
   }),
   "pieces/01-piece-1/versions/V1-version-1/story.png",
 );
+assert.equal(
+  getFeedbackAttachmentRelativePath({
+    attachment: snapshot.feedback[0].attachments[0],
+    feedback: snapshot.feedback[0],
+    piece: snapshot.pieces[0],
+    version: snapshot.pieces[0].versions[0],
+  }),
+  "pieces/01-piece-1/versions/V1-version-1/references/feedback-2/attachment-1-ref.png",
+);
 
 const driveIds = {
   deliveryFolderId: "drive-delivery-folder",
   journalFileId: "drive-journal",
   manifestFileId: "drive-manifest",
+  feedbackAttachmentFileIds: new Map([["attachment-1", "drive-attachment-file"]]),
   versionFileIds: new Map([["version-1", "drive-version-file"]]),
   versionFolderIds: new Map([["version-1", "drive-version-folder"]]),
 };
@@ -227,7 +270,7 @@ assert.equal(metadata.piece.currentReviewState, "OK");
 assert.equal(metadata.versions[0].reviewState, "OK");
 
 const manifest = buildDeliveryManifest({ driveIds, exportedAt, snapshot });
-assert.equal(manifest.schemaVersion, 2);
+assert.equal(manifest.schemaVersion, 3);
 assert.equal(manifest.delivery.driveManifestFileId, "drive-manifest");
 assert.equal(manifest.journal.driveFileId, "drive-journal");
 assert.equal(manifest.pieces[0].versions[0].driveFileId, "drive-version-file");
@@ -238,13 +281,19 @@ assert.equal(manifest.feedback[0].id, "feedback-2");
 assert.equal(manifest.feedback[0].pieceVersionId, "version-1");
 assert.equal(manifest.feedback[0].sourceType, FeedbackSourceType.OTHER);
 assert.equal(manifest.feedback[0].body, "Ajustar el CTA y mantener el fondo.");
-assert.deepEqual(manifest.feedback[0].attachmentIds, []);
+assert.deepEqual(manifest.feedback[0].attachmentIds, ["attachment-1"]);
 assert.deepEqual(
   manifest.users.map((item) => item.id),
   ["user-1", "user-2"],
 );
-assert.equal(manifest.attachments.length, 0);
-assert.match(serializeJsonForDrive(manifest), /"schemaVersion": 2,/);
+assert.equal(manifest.attachments.length, 1);
+assert.equal(manifest.attachments[0].id, "attachment-1");
+assert.equal(manifest.attachments[0].driveFileId, "drive-attachment-file");
+assert.equal(
+  manifest.attachments[0].relativePath,
+  "pieces/01-piece-1/versions/V1-version-1/references/feedback-2/attachment-1-ref.png",
+);
+assert.match(serializeJsonForDrive(manifest), /"schemaVersion": 3,/);
 
 assert.equal(
   serializeJournalJsonl(snapshot.journalEvents),
@@ -252,7 +301,7 @@ assert.equal(
 );
 assert.equal(
   serializeVersionFeedbackJsonl(snapshot.feedback),
-  '{"authorUserId":"user-1","body":"OK para publicar.","createdAt":"2026-08-13T12:10:00.000Z","id":"feedback-1","level":"PIECE","pieceId":"piece-1","pieceVersionId":"version-1","sourceType":"TOMI","updatedAt":"2026-08-13T12:10:00.000Z"}\n{"authorUserId":"user-2","body":"Ajustar el CTA y mantener el fondo.","createdAt":"2026-08-13T12:10:00.000Z","id":"feedback-2","level":"PIECE","pieceId":"piece-1","pieceVersionId":"version-1","sourceType":"OTHER","updatedAt":"2026-08-13T12:10:05.000Z"}\n',
+  '{"authorUserId":"user-1","attachmentIds":[],"body":"OK para publicar.","createdAt":"2026-08-13T12:10:00.000Z","id":"feedback-1","level":"PIECE","pieceId":"piece-1","pieceVersionId":"version-1","sourceType":"TOMI","updatedAt":"2026-08-13T12:10:00.000Z"}\n{"authorUserId":"user-2","attachmentIds":["attachment-1"],"body":"Ajustar el CTA y mantener el fondo.","createdAt":"2026-08-13T12:10:00.000Z","id":"feedback-2","level":"PIECE","pieceId":"piece-1","pieceVersionId":"version-1","sourceType":"OTHER","updatedAt":"2026-08-13T12:10:05.000Z"}\n',
 );
 
 assert.equal(canStartDriveBackup(SyncOperationStatus.PENDING), true);

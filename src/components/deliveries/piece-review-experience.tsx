@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useDriveRuntime } from "@/components/drive/drive-runtime";
 import { useToast } from "@/components/ui/toast";
@@ -10,6 +10,9 @@ import type { DeliveryDetail } from "@/lib/deliveries";
 import { PieceGrid } from "./piece-grid";
 import { PieceReviewModal } from "./piece-review-modal";
 import {
+  getFeedbackReferenceFileError,
+  getFeedbackReferenceIdentityKey,
+  getFeedbackReferenceSlotsAvailable,
   getOptimisticVersionIdsToDrop,
   mergePieceVersions,
   resolveFinalizeFailure,
@@ -21,6 +24,7 @@ type PieceFeedback = Piece["versions"][number]["feedback"][number];
 type PieceVersion = Piece["versions"][number];
 type ReviewState = Piece["reviewState"];
 type VersionUploadFlowPhase = "prepare" | "upload" | "finalize";
+type FeedbackAttachmentFlowPhase = "prepare" | "upload" | "finalize";
 
 type VersionUploadState = {
   attemptToken: string | null;
@@ -53,6 +57,40 @@ type FinalizeVersionResponse = {
   versionNumber: number;
 };
 
+type FeedbackReferenceSelection = {
+  error: string | null;
+  file: File;
+  id: string;
+  objectUrl: string;
+};
+
+type FeedbackAttachmentUploadState = {
+  attemptToken: string | null;
+  attachmentUploads: Array<{
+    id: string;
+    uploadUrl: string;
+  }>;
+  error: string | null;
+  feedbackId: string | null;
+  phase:
+    | "idle"
+    | "preparing"
+    | "uploading"
+    | "uploaded"
+    | "finalizing"
+    | "finalize-error";
+  uploaded: boolean;
+};
+
+type PrepareFeedbackAttachmentsResponse = {
+  attemptToken: string;
+  attachments: Array<{
+    id: string;
+    uploadUrl: string;
+  }>;
+  feedbackId: string;
+};
+
 const defaultUploadState: VersionUploadState = {
   attemptToken: null,
   error: null,
@@ -62,6 +100,15 @@ const defaultUploadState: VersionUploadState = {
   pieceVersionId: null,
   uploaded: false,
   versionNumber: null,
+};
+
+const defaultFeedbackAttachmentUploadState: FeedbackAttachmentUploadState = {
+  attemptToken: null,
+  attachmentUploads: [],
+  error: null,
+  feedbackId: null,
+  phase: "idle",
+  uploaded: false,
 };
 
 const maxVersionFileSizeBytes = 25 * 1024 * 1024;
@@ -83,6 +130,7 @@ export function PieceReviewExperience({
   const searchParams = useSearchParams();
   const driveRuntime = useDriveRuntime();
   const { showToast } = useToast();
+  const feedbackReferenceUrlsRef = useRef(new Set<string>());
   const [reviewOverrides, setReviewOverrides] = useState<
     Record<string, ReviewState>
   >({});
@@ -94,6 +142,12 @@ export function PieceReviewExperience({
   >({});
   const [versionUploads, setVersionUploads] = useState<
     Record<string, VersionUploadState>
+  >({});
+  const [feedbackReferences, setFeedbackReferences] = useState<
+    Record<string, FeedbackReferenceSelection[]>
+  >({});
+  const [feedbackAttachmentUploads, setFeedbackAttachmentUploads] = useState<
+    Record<string, FeedbackAttachmentUploadState>
   >({});
   const [pendingReviewVersionId, setPendingReviewVersionId] = useState<
     string | null
@@ -174,9 +228,25 @@ export function PieceReviewExperience({
     selectedPiece && selectedVersion
       ? `${selectedPiece.id}-${selectedVersion.id}`
       : "";
+  const selectedFeedbackReferences = draftKey
+    ? feedbackReferences[draftKey] ?? []
+    : [];
+  const selectedFeedbackAttachmentUpload = draftKey
+    ? feedbackAttachmentUploads[draftKey] ?? defaultFeedbackAttachmentUploadState
+    : defaultFeedbackAttachmentUploadState;
   const selectedUploadState = selectedPiece
     ? versionUploads[selectedPiece.id] ?? defaultUploadState
     : defaultUploadState;
+
+  useEffect(() => {
+    const objectUrls = feedbackReferenceUrlsRef.current;
+
+    return () => {
+      for (const objectUrl of objectUrls) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, []);
 
   function navigateToPiece(pieceId: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -289,6 +359,108 @@ export function PieceReviewExperience({
     }));
   }
 
+  function selectFeedbackReferences(files: FileList | File[]) {
+    if (
+      !draftKey ||
+      isReadOnly ||
+      !isSelectedLatestVersion ||
+      selectedFeedbackAttachmentUpload.phase === "preparing" ||
+      selectedFeedbackAttachmentUpload.phase === "uploading" ||
+      selectedFeedbackAttachmentUpload.phase === "finalizing"
+    ) {
+      return;
+    }
+
+    const incomingFiles = Array.from(files);
+
+    setFeedbackReferences((current) => {
+      const existing = current[draftKey] ?? [];
+      const existingKeys = new Set(
+        existing.map((reference) =>
+          getFeedbackReferenceIdentityKey(reference.file),
+        ),
+      );
+      const slotsAvailable = getFeedbackReferenceSlotsAvailable(existing.length);
+      const nextReferences: FeedbackReferenceSelection[] = [];
+
+      for (const file of incomingFiles) {
+        if (nextReferences.length >= slotsAvailable) {
+          break;
+        }
+
+        const identityKey = getFeedbackReferenceIdentityKey(file);
+
+        if (existingKeys.has(identityKey)) {
+          continue;
+        }
+
+        existingKeys.add(identityKey);
+        const objectUrl = URL.createObjectURL(file);
+        feedbackReferenceUrlsRef.current.add(objectUrl);
+        nextReferences.push({
+          error: getFeedbackReferenceFileError(file),
+          file,
+          id: `feedback-reference-${file.name}-${file.size}-${file.lastModified}`,
+          objectUrl,
+        });
+      }
+
+      return {
+        ...current,
+        [draftKey]: [...existing, ...nextReferences],
+      };
+    });
+  }
+
+  function removeFeedbackReference(referenceId: string) {
+    if (!draftKey) {
+      return;
+    }
+
+    setFeedbackReferences((current) => {
+      const existing = current[draftKey] ?? [];
+      const reference = existing.find((item) => item.id === referenceId);
+
+      if (reference) {
+        URL.revokeObjectURL(reference.objectUrl);
+        feedbackReferenceUrlsRef.current.delete(reference.objectUrl);
+      }
+
+      return {
+        ...current,
+        [draftKey]: existing.filter((item) => item.id !== referenceId),
+      };
+    });
+    setFeedbackAttachmentUploads((current) => {
+      const next = { ...current };
+      delete next[draftKey];
+      return next;
+    });
+  }
+
+  function clearFeedbackComposer(key: string, options: { revokeUrls?: boolean } = {}) {
+    const references = feedbackReferences[key] ?? [];
+
+    if (options.revokeUrls ?? true) {
+      for (const reference of references) {
+        URL.revokeObjectURL(reference.objectUrl);
+        feedbackReferenceUrlsRef.current.delete(reference.objectUrl);
+      }
+    }
+
+    setFeedbackReferences((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    setFeedbackAttachmentUploads((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    setDrafts((current) => ({ ...current, [key]: "" }));
+  }
+
   async function submitFeedback() {
     if (
       !selectedPiece ||
@@ -301,13 +473,32 @@ export function PieceReviewExperience({
     }
 
     const body = (drafts[draftKey] ?? "").trim();
+    const references = selectedFeedbackReferences;
 
     if (!body || pendingFeedbackKey === draftKey) {
       return;
     }
 
+    if (references.some((reference) => reference.error)) {
+      showToast({
+        description: "Revisá las referencias seleccionadas.",
+        title: "No pudimos guardar el feedback",
+        tone: "error",
+      });
+      return;
+    }
+
     if (isVisualReviewMode) {
       const feedback: PieceFeedback = {
+        attachments: references.map((reference) => ({
+          createdAtLabel: "Ahora",
+          fileSizeBytes: reference.file.size,
+          id: reference.id,
+          imageSrc: reference.objectUrl,
+          mimeType: reference.file.type,
+          originalFilename: reference.file.name,
+          uploadedByLabel: "Tomi Preview",
+        })),
         author: "Tomi Preview",
         body,
         createdAtLabel: "Ahora",
@@ -316,39 +507,78 @@ export function PieceReviewExperience({
       };
 
       addFeedbackOverride(selectedVersion.id, feedback);
-      setDrafts((current) => ({ ...current, [draftKey]: "" }));
+      clearFeedbackComposer(draftKey, { revokeUrls: false });
       return;
     }
 
     setPendingFeedbackKey(draftKey);
 
     try {
-      const response = await fetch(`/api/pieces/${selectedPiece.id}/feedback`, {
-        body: JSON.stringify({
-          body,
-          pieceVersionId: selectedVersion.id,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        throw await readApiError(response);
-      }
-
-      const result = (await response.json()) as { feedback: PieceFeedback };
+      const result =
+        references.length > 0
+          ? await submitFeedbackWithReferences({
+              body,
+              draftKey,
+              pieceId: selectedPiece.id,
+              pieceVersionId: selectedVersion.id,
+              references,
+            })
+          : await submitTextOnlyFeedback({
+              body,
+              pieceId: selectedPiece.id,
+              pieceVersionId: selectedVersion.id,
+            });
 
       addFeedbackOverride(selectedVersion.id, result.feedback);
-      setDrafts((current) => ({ ...current, [draftKey]: "" }));
+      clearFeedbackComposer(draftKey);
       void driveRuntime.notifyBackupPending();
       router.refresh();
     } catch (error) {
+      const uploadError =
+        error instanceof FeedbackAttachmentFlowError ? error : null;
+      const apiError =
+        error instanceof ApiRequestError
+          ? error
+          : uploadError?.apiError;
       const resolution = resolveReviewMutationFailure({
-        code: error instanceof ApiRequestError ? error.code : undefined,
+        code: apiError?.code,
         operation: "feedback",
       });
+
+      if (uploadError?.phase === "upload" && uploadError.attemptToken) {
+        void cleanupFeedbackAttachmentUpload(
+          selectedPiece.id,
+          uploadError.attemptToken,
+        );
+        resetFeedbackAttachmentAttempt(draftKey);
+      }
+
+      if (uploadError?.phase === "finalize") {
+        const shouldDiscardAttempt =
+          apiError?.code === "HISTORICAL_VERSION" ||
+          apiError?.code === "DELIVERY_CLOSED" ||
+          apiError?.status === 400 ||
+          (apiError?.status !== undefined && apiError.status < 500);
+
+        setFeedbackAttachmentUploads((current) => ({
+          ...current,
+          [draftKey]: {
+            ...selectedFeedbackAttachmentUpload,
+            attemptToken: shouldDiscardAttempt
+              ? null
+              : uploadError.attemptToken ?? null,
+            attachmentUploads: shouldDiscardAttempt
+              ? []
+              : uploadError.attachmentUploads,
+            error: resolution.description,
+            feedbackId: shouldDiscardAttempt
+              ? null
+              : selectedFeedbackAttachmentUpload.feedbackId,
+            phase: shouldDiscardAttempt ? "idle" : "finalize-error",
+            uploaded: !shouldDiscardAttempt,
+          },
+        }));
+      }
 
       if (resolution.shouldRefresh) {
         router.refresh();
@@ -362,6 +592,216 @@ export function PieceReviewExperience({
     } finally {
       setPendingFeedbackKey(null);
     }
+  }
+
+  async function submitTextOnlyFeedback({
+    body,
+    pieceId,
+    pieceVersionId,
+  }: {
+    body: string;
+    pieceId: string;
+    pieceVersionId: string;
+  }) {
+    const response = await fetch(`/api/pieces/${pieceId}/feedback`, {
+      body: JSON.stringify({
+        body,
+        pieceVersionId,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw await readApiError(response);
+    }
+
+    return (await response.json()) as { feedback: PieceFeedback };
+  }
+
+  async function submitFeedbackWithReferences({
+    body,
+    draftKey,
+    pieceId,
+    pieceVersionId,
+    references,
+  }: {
+    body: string;
+    draftKey: string;
+    pieceId: string;
+    pieceVersionId: string;
+    references: FeedbackReferenceSelection[];
+  }) {
+    let attemptToken = selectedFeedbackAttachmentUpload.attemptToken;
+    let attachmentUploads = selectedFeedbackAttachmentUpload.attachmentUploads;
+    let phase: FeedbackAttachmentFlowPhase =
+      selectedFeedbackAttachmentUpload.uploaded ? "finalize" : "prepare";
+
+    try {
+      if (!attemptToken) {
+        setFeedbackAttachmentUploads((current) => ({
+          ...current,
+          [draftKey]: {
+            ...defaultFeedbackAttachmentUploadState,
+            phase: "preparing",
+          },
+        }));
+
+        const prepareResponse = await fetch(
+          `/api/pieces/${pieceId}/feedback/attachments/prepare`,
+          {
+            body: JSON.stringify({
+              attachments: references.map((reference) => ({
+                fileSizeBytes: reference.file.size,
+                filename: reference.file.name,
+                mimeType: reference.file.type,
+              })),
+              pieceVersionId,
+            }),
+            headers: {
+              "Content-Type": "application/json",
+            },
+            method: "POST",
+          },
+        );
+
+        if (!prepareResponse.ok) {
+          throw new FeedbackAttachmentFlowError("prepare", {
+            apiError: await readApiError(prepareResponse),
+          });
+        }
+
+        const prepared =
+          (await prepareResponse.json()) as PrepareFeedbackAttachmentsResponse;
+
+        attemptToken = prepared.attemptToken;
+        attachmentUploads = prepared.attachments;
+
+        setFeedbackAttachmentUploads((current) => ({
+          ...current,
+          [draftKey]: {
+            attemptToken,
+            attachmentUploads,
+            error: null,
+            feedbackId: prepared.feedbackId,
+            phase: "uploading",
+            uploaded: false,
+          },
+        }));
+      }
+
+      if (!attemptToken) {
+        throw new FeedbackAttachmentFlowError("prepare");
+      }
+
+      if (!selectedFeedbackAttachmentUpload.uploaded) {
+        phase = "upload";
+        await uploadFeedbackReferences({
+          attachmentUploads,
+          references,
+        });
+
+        setFeedbackAttachmentUploads((current) => ({
+          ...current,
+          [draftKey]: {
+            ...(current[draftKey] ?? defaultFeedbackAttachmentUploadState),
+            attemptToken,
+            attachmentUploads,
+            error: null,
+            phase: "finalizing",
+            uploaded: true,
+          },
+        }));
+      }
+
+      phase = "finalize";
+      const finalizeResponse = await fetch(
+        `/api/pieces/${pieceId}/feedback/attachments/finalize`,
+        {
+          body: JSON.stringify({
+            attemptToken,
+            body,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+
+      if (!finalizeResponse.ok) {
+        throw new FeedbackAttachmentFlowError("finalize", {
+          apiError: await readApiError(finalizeResponse),
+          attachmentUploads,
+          attemptToken,
+        });
+      }
+
+      return (await finalizeResponse.json()) as { feedback: PieceFeedback };
+    } catch (error) {
+      if (error instanceof FeedbackAttachmentFlowError) {
+        throw error;
+      }
+
+      throw new FeedbackAttachmentFlowError(phase, {
+        attachmentUploads,
+        attemptToken,
+      });
+    }
+  }
+
+  async function uploadFeedbackReferences({
+    attachmentUploads,
+    references,
+  }: {
+    attachmentUploads: Array<{ id: string; uploadUrl: string }>;
+    references: FeedbackReferenceSelection[];
+  }) {
+    const uploadById = new Map(
+      attachmentUploads.map((attachment) => [attachment.id, attachment]),
+    );
+    const queue = references.map((reference, index) => ({
+      reference,
+      upload: attachmentUploads[index] ?? uploadById.get(reference.id),
+    }));
+    let cursor = 0;
+
+    async function worker() {
+      while (cursor < queue.length) {
+        const item = queue[cursor];
+        cursor += 1;
+
+        if (!item?.upload) {
+          throw new Error("Missing feedback attachment upload URL.");
+        }
+
+        const response = await fetch(item.upload.uploadUrl, {
+          body: item.reference.file,
+          headers: {
+            "Content-Type": item.reference.file.type,
+          },
+          method: "PUT",
+        });
+
+        if (!response.ok) {
+          throw new Error("Feedback attachment upload failed.");
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(3, queue.length) }, () => worker()),
+    );
+  }
+
+  function resetFeedbackAttachmentAttempt(key: string) {
+    setFeedbackAttachmentUploads((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
   }
 
   function selectVersionFile(file: File | null) {
@@ -673,6 +1113,8 @@ export function PieceReviewExperience({
       {selectedPiece && selectedVersion ? (
         <PieceReviewModal
           draft={drafts[draftKey] ?? ""}
+          feedbackAttachmentUpload={selectedFeedbackAttachmentUpload}
+          feedbackReferences={selectedFeedbackReferences}
           hasNext={selectedIndex >= 0 && selectedIndex < pieceItems.length - 1}
           hasPrevious={selectedIndex > 0}
           isFeedbackSubmitting={pendingFeedbackKey === draftKey}
@@ -681,6 +1123,8 @@ export function PieceReviewExperience({
           isReviewSaving={pendingReviewVersionId === selectedVersion.id}
           onClose={closeModal}
           onDraftChange={updateDraft}
+          onFeedbackReferenceRemove={removeFeedbackReference}
+          onFeedbackReferenceSelect={selectFeedbackReferences}
           onFeedbackSubmit={submitFeedback}
           onNext={() => goToOffset(1)}
           onPrevious={() => goToOffset(-1)}
@@ -746,6 +1190,21 @@ export function PieceReviewExperience({
 
 async function cleanupVersionUpload(pieceId: string, attemptToken: string) {
   await fetch(`/api/pieces/${pieceId}/versions/cleanup-upload`, {
+    body: JSON.stringify({
+      attemptToken,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  }).catch(() => null);
+}
+
+async function cleanupFeedbackAttachmentUpload(
+  pieceId: string,
+  attemptToken: string,
+) {
+  await fetch(`/api/pieces/${pieceId}/feedback/attachments/cleanup`, {
     body: JSON.stringify({
       attemptToken,
     }),
@@ -865,6 +1324,27 @@ class VersionUploadFlowError extends Error {
   ) {
     super("Version upload flow failed.");
     this.name = "VersionUploadFlowError";
+  }
+}
+
+class FeedbackAttachmentFlowError extends Error {
+  public readonly apiError?: ApiErrorPayload;
+  public readonly attachmentUploads: Array<{ id: string; uploadUrl: string }>;
+  public readonly attemptToken?: string | null;
+
+  constructor(
+    public readonly phase: FeedbackAttachmentFlowPhase,
+    options: {
+      apiError?: ApiErrorPayload;
+      attachmentUploads?: Array<{ id: string; uploadUrl: string }>;
+      attemptToken?: string | null;
+    } = {},
+  ) {
+    super("Feedback attachment flow failed.");
+    this.name = "FeedbackAttachmentFlowError";
+    this.apiError = options.apiError;
+    this.attachmentUploads = options.attachmentUploads ?? [];
+    this.attemptToken = options.attemptToken;
   }
 }
 

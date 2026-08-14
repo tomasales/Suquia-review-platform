@@ -16,10 +16,21 @@ export type DeliveryUploadReceiptPiece = {
   storageKey: string;
 };
 
+export type PieceFeedbackAttachmentReceiptItem = {
+  fileSizeBytes: number;
+  filename: string;
+  id: string;
+  mimeType: string;
+  storageKey: string;
+};
+
 type BaseUploadReceiptPayload = {
   expiresAt: number;
   issuedAt: number;
-  kind: "delivery-creation" | "piece-version-upload";
+  kind:
+    | "delivery-creation"
+    | "piece-feedback-attachments"
+    | "piece-version-upload";
   userId: string;
 };
 
@@ -42,6 +53,15 @@ export type PieceVersionUploadReceiptPayload = BaseUploadReceiptPayload & {
   previousLatestVersionId: string;
   previousLatestVersionNumber: number;
   storageKey: string;
+};
+
+export type PieceFeedbackAttachmentsReceiptPayload = BaseUploadReceiptPayload & {
+  attachments: PieceFeedbackAttachmentReceiptItem[];
+  deliveryId: string;
+  feedbackId: string;
+  kind: "piece-feedback-attachments";
+  pieceId: string;
+  pieceVersionId: string;
 };
 
 type CreateReceiptOptions = {
@@ -132,8 +152,54 @@ export function verifyPieceVersionUploadReceipt(
   return payload;
 }
 
+export function createPieceFeedbackAttachmentsReceipt(
+  payload: Omit<
+    PieceFeedbackAttachmentsReceiptPayload,
+    "expiresAt" | "issuedAt" | "kind"
+  >,
+  options: CreateReceiptOptions = {},
+) {
+  const now = options.now ?? new Date();
+  const issuedAt = Math.floor(now.getTime() / 1000);
+  const receiptPayload: PieceFeedbackAttachmentsReceiptPayload = {
+    attachments: payload.attachments.map((attachment) => ({
+      fileSizeBytes: attachment.fileSizeBytes,
+      filename: attachment.filename,
+      id: attachment.id,
+      mimeType: attachment.mimeType,
+      storageKey: attachment.storageKey,
+    })),
+    deliveryId: payload.deliveryId,
+    expiresAt: issuedAt + DELIVERY_UPLOAD_RECEIPT_EXPIRES_IN_SECONDS,
+    feedbackId: payload.feedbackId,
+    issuedAt,
+    kind: "piece-feedback-attachments",
+    pieceId: payload.pieceId,
+    pieceVersionId: payload.pieceVersionId,
+    userId: payload.userId,
+  };
+
+  return createUploadReceiptToken(receiptPayload, options);
+}
+
+export function verifyPieceFeedbackAttachmentsReceipt(
+  token: string,
+  options: VerifyReceiptOptions = {},
+) {
+  const payload = verifyUploadReceipt(token, options);
+
+  if (payload.kind !== "piece-feedback-attachments") {
+    throw new StorageValidationError("Receipt de subida inválido.");
+  }
+
+  return payload;
+}
+
 function createUploadReceiptToken(
-  payload: DeliveryUploadReceiptPayload | PieceVersionUploadReceiptPayload,
+  payload:
+    | DeliveryUploadReceiptPayload
+    | PieceFeedbackAttachmentsReceiptPayload
+    | PieceVersionUploadReceiptPayload,
   options: CreateReceiptOptions,
 ) {
   const encodedPayload = base64UrlEncode(JSON.stringify(sortJsonValue(payload)));
@@ -172,7 +238,10 @@ function verifyUploadReceipt(
 }
 
 export function assertDeliveryUploadReceiptUser(
-  payload: DeliveryUploadReceiptPayload | PieceVersionUploadReceiptPayload,
+  payload:
+    | DeliveryUploadReceiptPayload
+    | PieceFeedbackAttachmentsReceiptPayload
+    | PieceVersionUploadReceiptPayload,
   userId: string,
 ) {
   if (payload.userId !== userId) {
@@ -192,7 +261,10 @@ export function getReceiptSecret(options: { secret?: string } = {}) {
 
 function parseReceiptPayload(
   encodedPayload: string,
-): DeliveryUploadReceiptPayload | PieceVersionUploadReceiptPayload {
+):
+  | DeliveryUploadReceiptPayload
+  | PieceFeedbackAttachmentsReceiptPayload
+  | PieceVersionUploadReceiptPayload {
   let payload: unknown;
 
   try {
@@ -207,6 +279,7 @@ function parseReceiptPayload(
     typeof payload.expiresAt !== "number" ||
     typeof payload.issuedAt !== "number" ||
     (payload.kind !== "delivery-creation" &&
+      payload.kind !== "piece-feedback-attachments" &&
       payload.kind !== "piece-version-upload") ||
     typeof payload.userId !== "string"
   ) {
@@ -215,6 +288,10 @@ function parseReceiptPayload(
 
   if (payload.kind === "piece-version-upload") {
     return parsePieceVersionUploadReceiptPayload(payload);
+  }
+
+  if (payload.kind === "piece-feedback-attachments") {
+    return parsePieceFeedbackAttachmentsReceiptPayload(payload);
   }
 
   if (
@@ -232,6 +309,31 @@ function parseReceiptPayload(
     pieces: payload.pieces.map(parseReceiptPiece),
     type: payload.type,
     userId: payload.userId,
+  };
+}
+
+function parsePieceFeedbackAttachmentsReceiptPayload(
+  payload: Record<string, unknown>,
+): PieceFeedbackAttachmentsReceiptPayload {
+  if (
+    !Array.isArray(payload.attachments) ||
+    typeof payload.feedbackId !== "string" ||
+    typeof payload.pieceId !== "string" ||
+    typeof payload.pieceVersionId !== "string"
+  ) {
+    throw new StorageValidationError("Receipt de subida inválido.");
+  }
+
+  return {
+    attachments: payload.attachments.map(parseFeedbackAttachmentReceiptItem),
+    deliveryId: payload.deliveryId as string,
+    expiresAt: payload.expiresAt as number,
+    feedbackId: payload.feedbackId,
+    issuedAt: payload.issuedAt as number,
+    kind: "piece-feedback-attachments",
+    pieceId: payload.pieceId,
+    pieceVersionId: payload.pieceVersionId,
+    userId: payload.userId as string,
   };
 }
 
@@ -267,6 +369,29 @@ function parsePieceVersionUploadReceiptPayload(
     previousLatestVersionNumber: payload.previousLatestVersionNumber,
     storageKey: payload.storageKey,
     userId: payload.userId as string,
+  };
+}
+
+function parseFeedbackAttachmentReceiptItem(
+  attachment: unknown,
+): PieceFeedbackAttachmentReceiptItem {
+  if (
+    !isRecord(attachment) ||
+    typeof attachment.fileSizeBytes !== "number" ||
+    typeof attachment.filename !== "string" ||
+    typeof attachment.id !== "string" ||
+    typeof attachment.mimeType !== "string" ||
+    typeof attachment.storageKey !== "string"
+  ) {
+    throw new StorageValidationError("Receipt de subida inválido.");
+  }
+
+  return {
+    fileSizeBytes: attachment.fileSizeBytes,
+    filename: attachment.filename,
+    id: attachment.id,
+    mimeType: attachment.mimeType,
+    storageKey: attachment.storageKey,
   };
 }
 

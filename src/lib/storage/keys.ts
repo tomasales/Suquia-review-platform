@@ -66,13 +66,25 @@ export function buildPieceVersionStorageKey({
 }
 
 export function buildFeedbackAttachmentStorageKey({
+  attachmentId,
+  deliveryId,
   feedbackId,
   filename,
+  pieceId,
+  versionNumber,
 }: {
+  attachmentId: string;
+  deliveryId: string;
   feedbackId: string;
   filename: string;
+  pieceId: string;
+  versionNumber: number;
 }) {
-  return `feedback/${feedbackId}/attachments/${createStorageUuid()}-${sanitizeFilename(
+  if (!versionNumber) {
+    throw new StorageValidationError("Versión de pieza requerida.");
+  }
+
+  return `deliveries/${deliveryId}/pieces/${pieceId}/v${versionNumber}/feedback/${feedbackId}/references/${attachmentId}-${sanitizeFilename(
     filename,
   )}`;
 }
