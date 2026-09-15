@@ -127,7 +127,9 @@ export function PieceReviewPanel({
               V{selectedVersion.versionNumber}
             </h2>
           </div>
-          <Badge tone={state.tone}>{state.label}</Badge>
+          <Badge size="lg" tone={state.tone}>
+            {state.label}
+          </Badge>
         </div>
 
         {piece.initialNote ? (
@@ -400,29 +402,6 @@ export function PieceReviewPanel({
               </Button>
             </div>
           </div>
-        </section>
-
-        <section>
-          <p className="text-sm font-semibold text-foreground">Referencias</p>
-          {selectedVersion.references.length > 0 ? (
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {selectedVersion.references.map((reference) => (
-                <div key={reference.id}>
-                  <ReferenceThumb
-                    imageSrc={reference.imageSrc}
-                    title={reference.title}
-                  />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {reference.title}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-muted-foreground">
-              Sin referencias adjuntas.
-            </p>
-          )}
         </section>
 
         <section>

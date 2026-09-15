@@ -142,11 +142,11 @@ export function PieceReviewModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex max-w-[100dvw] items-center justify-center overflow-hidden bg-black/28 md:p-6">
+    <div className="fixed inset-0 z-50 flex max-w-[100dvw] items-center justify-center overflow-hidden bg-black/28 md:p-3">
       <div
         aria-label={`Revisión de pieza ${piece.position}`}
         aria-modal="true"
-        className="flex h-[100dvh] w-[100dvw] max-w-[100dvw] flex-col overflow-hidden bg-surface outline-none md:grid md:h-[min(760px,calc(100vh-48px))] md:w-[min(1180px,calc(100vw-48px))] md:grid-cols-[minmax(0,1fr)_360px] md:rounded-[12px] md:border md:border-border md:shadow-[0_18px_60px_rgba(25,24,23,0.18)]"
+        className="flex h-[100dvh] w-[100dvw] max-w-[100dvw] flex-col overflow-hidden bg-surface outline-none md:grid md:h-[calc(100dvh-24px)] md:w-[calc(100dvw-24px)] md:grid-cols-[minmax(0,1fr)_minmax(420px,28vw)] md:rounded-[12px] md:border md:border-border md:shadow-[0_18px_60px_rgba(25,24,23,0.18)] xl:grid-cols-[minmax(0,1fr)_480px]"
         onKeyDown={handleKeyDown}
         ref={dialogRef}
         role="dialog"

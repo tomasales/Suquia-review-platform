@@ -3,6 +3,7 @@ import { Suspense } from "react";
 
 import { DeliveryCreatedToast } from "@/components/deliveries/delivery-created-toast";
 import { PieceReviewExperience } from "@/components/deliveries/piece-review-experience";
+import { VisualReviewUploadDetail } from "@/components/deliveries/visual-review-upload-detail";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { Surface } from "@/components/ui/surface";
 import { getDeliveryById } from "@/lib/deliveries";
 import { requireAuthorizedUser } from "@/lib/session";
 import { isVisualReviewMode } from "@/lib/visual-review";
+import { isVisualReviewUploadId } from "@/lib/visual-review-upload-store";
 
 type DeliveryDetailPageProps = {
   params: Promise<{
@@ -22,6 +24,18 @@ export default async function DeliveryDetailPage({
 }: DeliveryDetailPageProps) {
   const user = await requireAuthorizedUser();
   const { id } = await params;
+
+  if (isVisualReviewMode() && isVisualReviewUploadId(id)) {
+    return (
+      <AppShell user={user}>
+        <Suspense fallback={null}>
+          <DeliveryCreatedToast />
+        </Suspense>
+        <VisualReviewUploadDetail deliveryId={id} />
+      </AppShell>
+    );
+  }
+
   const delivery = await getDeliveryById(id);
 
   if (!delivery) {
@@ -37,7 +51,11 @@ export default async function DeliveryDetailPage({
       <PageHeader
         title={delivery.title}
         description={`${delivery.typeLabel} · ${delivery.dateLabel} · ${delivery.authorLabel}`}
-        action={<Badge tone={delivery.statusTone}>{delivery.statusLabel}</Badge>}
+        action={
+          <Badge size="lg" tone={delivery.statusTone}>
+            {delivery.statusLabel}
+          </Badge>
+        }
       />
 
       <section className="mt-4 grid gap-4 xl:mt-6 xl:grid-cols-[minmax(0,1fr)_260px] xl:gap-5">

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 type BadgeProps = {
   children: ReactNode;
+  size?: "sm" | "lg";
   tone?:
     | "closed"
     | "danger"
@@ -22,10 +23,15 @@ const tones = {
   warning: "border-amber-300 bg-amber-50 text-amber-800",
 };
 
-export function Badge({ children, tone = "neutral" }: BadgeProps) {
+const sizes = {
+  lg: "min-h-7 rounded-[8px] px-2.5 py-1 text-xs",
+  sm: "h-5 rounded-[6px] px-1.5 text-[11px]",
+};
+
+export function Badge({ children, size = "sm", tone = "neutral" }: BadgeProps) {
   return (
     <span
-      className={`inline-flex h-5 items-center whitespace-nowrap rounded-[6px] border px-1.5 text-[11px] font-medium ${tones[tone]}`}
+      className={`inline-flex items-center whitespace-nowrap border font-medium ${sizes[size]} ${tones[tone]}`}
     >
       {children}
     </span>

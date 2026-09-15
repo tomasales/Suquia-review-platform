@@ -2,8 +2,6 @@
 
 import {
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
   Check,
   FileImage,
   GripVertical,
@@ -28,6 +26,7 @@ import { useDriveRuntime } from "@/components/drive/drive-runtime";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
 import { useToast } from "@/components/ui/toast";
+import { saveVisualReviewUploadDelivery } from "@/lib/visual-review-upload-store";
 
 type DeliveryType = "STORIES" | "FEED";
 type PieceUploadStatus = "idle" | "uploading" | "uploaded" | "error";
@@ -281,29 +280,35 @@ export function DeliveryUploadFlow({
       : deliveryType === "FEED"
         ? "aspect-square"
         : "min-h-[220px]";
-  const summary = `${getTypeLabel(deliveryType)} · ${pieces.length} ${
-    pieces.length === 1 ? "pieza" : "piezas"
-  }`;
-
-  const submitDescription = useMemo(() => {
+  const summary = useMemo(() => {
     if (!deliveryType && pieces.length === 0) {
-      return "Elegí tipo y agregá piezas para entregar.";
+      return {
+        description: "Elegí un tipo y agregá al menos una pieza.",
+        title: "Falta completar la entrega",
+      };
     }
 
     if (!deliveryType) {
-      return "Elegí Stories o Feed para entregar.";
+      return {
+        description: "Elegí Stories o Feed para continuar.",
+        title: "Falta elegir el tipo",
+      };
     }
 
     if (pieces.length === 0) {
-      return "Agregá al menos una pieza para entregar.";
+      return {
+        description: "Agregá al menos una pieza.",
+        title: "Faltan piezas",
+      };
     }
 
-    if (visualReviewMode) {
-      return "Vista previa: la entrega todavía no se guardó.";
-    }
-
-    return "Al entregar se suben las piezas y se abre el detalle.";
-  }, [deliveryType, pieces.length, visualReviewMode]);
+    return {
+      description: "Lista para entregar. Al finalizar se abre el detalle.",
+      title: `${getTypeLabel(deliveryType)} · ${pieces.length} ${
+        pieces.length === 1 ? "pieza" : "piezas"
+      }`,
+    };
+  }, [deliveryType, pieces.length]);
 
   function addFiles(fileList: FileList | File[]) {
     if (isSubmitting) {
@@ -371,32 +376,6 @@ export function DeliveryUploadFlow({
       }
 
       return currentPieces.filter((piece) => piece.id !== pieceId);
-    });
-  }
-
-  function movePiece(pieceId: string, direction: -1 | 1) {
-    if (isSubmitting) {
-      return;
-    }
-
-    discardPreparedAttemptForStructuralChange();
-    setPieces((currentPieces) => {
-      const currentIndex = currentPieces.findIndex((piece) => piece.id === pieceId);
-      const nextIndex = currentIndex + direction;
-
-      if (
-        currentIndex < 0 ||
-        nextIndex < 0 ||
-        nextIndex >= currentPieces.length
-      ) {
-        return currentPieces;
-      }
-
-      const nextPieces = [...currentPieces];
-      const [piece] = nextPieces.splice(currentIndex, 1);
-      nextPieces.splice(nextIndex, 0, piece);
-
-      return nextPieces;
     });
   }
 
@@ -670,12 +649,26 @@ export function DeliveryUploadFlow({
         return;
       }
 
-      const targetDeliveryId =
-        deliveryType === "FEED" ? "visual-feed-review" : "visual-stories-sent";
+      try {
+        const delivery = await saveVisualReviewUploadDelivery({
+          generalNote,
+          pieces: pieces.map((piece) => ({
+            file: piece.file,
+            id: piece.id,
+            note: piece.note,
+          })),
+          type: deliveryType,
+        });
 
-      router.push(
-        `/deliveries/${targetDeliveryId}?created=1&pieces=${pieces.length}`,
-      );
+        router.push(`/deliveries/${delivery.id}?created=1&pieces=${pieces.length}`);
+      } catch (error) {
+        setIsSubmitting(false);
+        showToast({
+          title: "No pudimos crear la entrega",
+          description: getClientErrorMessage(error),
+          tone: "error",
+        });
+      }
       return;
     }
 
@@ -864,12 +857,9 @@ export function DeliveryUploadFlow({
                     <UploadPieceCard
                       aspectClass={aspectClass}
                       index={index}
-                      isFirst={index === 0}
-                      isLast={index === pieces.length - 1}
                       key={piece.id}
                       onDragStart={handlePieceDragStart}
                       onDrop={handlePieceDrop}
-                      onMove={movePiece}
                       onPreviewError={markPreviewError}
                       onRemove={removePiece}
                       onCancelNote={cancelPieceNote}
@@ -921,7 +911,7 @@ export function DeliveryUploadFlow({
             <div className="space-y-4">
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  {summary}
+                  {summary.title}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   {piecesWithNotes > 0
@@ -933,7 +923,7 @@ export function DeliveryUploadFlow({
               </div>
 
               <div className="rounded-[8px] border border-border bg-background px-3 py-2 text-xs leading-5 text-muted-foreground">
-                {submitDescription}
+                {summary.description}
               </div>
 
               <Button
@@ -954,11 +944,8 @@ export function DeliveryUploadFlow({
 type UploadPieceCardProps = {
   aspectClass: string;
   index: number;
-  isFirst: boolean;
-  isLast: boolean;
   onDragStart: (pieceId: string) => void;
   onDrop: (pieceId: string) => void;
-  onMove: (pieceId: string, direction: -1 | 1) => void;
   onCancelNote: (pieceId: string) => void;
   onPreviewError: (pieceId: string) => void;
   onRemove: (pieceId: string) => void;
@@ -991,11 +978,8 @@ function getUploadBadge(piece: UploadPiece) {
 function UploadPieceCard({
   aspectClass,
   index,
-  isFirst,
-  isLast,
   onDragStart,
   onDrop,
-  onMove,
   onCancelNote,
   onPreviewError,
   onRemove,
@@ -1025,24 +1009,6 @@ function UploadPieceCard({
           <Badge tone={uploadBadge.tone}>{uploadBadge.label}</Badge>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            aria-label={`Mover pieza ${position} arriba`}
-            className="inline-flex size-9 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-surface-muted hover:text-foreground disabled:opacity-35"
-            disabled={isFirst || isDisabled}
-            onClick={() => onMove(piece.id, -1)}
-            type="button"
-          >
-            <ArrowUp className="size-4" strokeWidth={1.8} />
-          </button>
-          <button
-            aria-label={`Mover pieza ${position} abajo`}
-            className="inline-flex size-9 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-surface-muted hover:text-foreground disabled:opacity-35"
-            disabled={isLast || isDisabled}
-            onClick={() => onMove(piece.id, 1)}
-            type="button"
-          >
-            <ArrowDown className="size-4" strokeWidth={1.8} />
-          </button>
           <button
             aria-label={`Eliminar pieza ${position}`}
             className="inline-flex size-9 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-surface-muted hover:text-destructive"
