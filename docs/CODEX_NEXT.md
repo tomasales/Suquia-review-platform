@@ -1,65 +1,43 @@
 # CODEX_NEXT
 
-Este archivo contiene la única tarea operativa que Codex debe ejecutar después de que `docs/CODEX_RUN.md` haya sincronizado `main`.
+## Tarea actual — Preparar Live Pilot MVP
 
-## Protocolo
+Objetivo: dejar el núcleo actual listo para probarse en una URL pública con datos reales y persistentes entre Tomi y una persona colaboradora.
 
-1. Leer este archivo completo después del pull.
-2. Releer el código relevante antes de tocar comportamiento.
-3. Implementar únicamente esta corrección.
-4. Mantener intacto el modo real PostgreSQL/R2/Drive.
-5. Ejecutar validaciones al final.
-6. Si queda correcto, commit + push a `main` y detenerse.
+### Scope
 
----
+- Mantener el flujo real actual: Google login, Delivery, piezas, review state, feedback con referencias y versionado.
+- PostgreSQL + R2 son obligatorios.
+- Google Drive debe ser opcional para este primer pilot.
+- No implementar AI, ConversationReply, búsqueda, restore, Guidelines management, roles, notificaciones ni métricas en este bloque.
 
-# Tarea actual — Corregir storage de uploads en Visual Review
+### Readiness de producción
 
-El batch `feat: improve visual review validation flow` quedó conceptualmente correcto, pero la implementación actual de `src/lib/visual-review-upload-store.ts` convierte cada archivo local a Data URL y serializa todas las imágenes dentro de `window.sessionStorage`.
+- Agregar script de migración de producción con `prisma migrate deploy`.
+- Agregar un `GET /api/health` mínimo que valide conectividad con PostgreSQL y responda 200/503 sin exponer información sensible.
+- Documentar el orden de build, migraciones y start para un servidor Node/Next.js.
 
-Eso es un blocker para la validación manual: varias imágenes reales pueden superar rápidamente la cuota de sessionStorage y hacer fallar `Entregar` aunque el producto solo necesite conservar la composición durante navegación SPA.
+### Allowlist
 
-## Objetivo
+Agregar un CLI idempotente para activar un email en `AuthorizedEmail`, reutilizando la normalización existente y permitiendo indicar `isAiLearningSource`. No crear `User` manualmente ni hardcodear emails reales.
 
-En `SUQUIA_VISUAL_REVIEW=1`, mantener la entrega simulada solamente en memoria del navegador durante la sesión SPA, sin serializar binarios/base64 en Web Storage.
+### Drive opcional
 
-## Comportamiento esperado
+Si Drive no está configurado, el core debe seguir funcionando y la UI no debe mostrar un estado de error de Drive. Evitar polling/sync innecesario. Si está configurado, conservar el comportamiento actual.
 
-- `Nueva entrega → Entregar → detalle` debe seguir mostrando exactamente los archivos seleccionados.
-- Debe preservar orden, tipo, nota general y notas por pieza.
-- Las imágenes deben mostrarse usando object URLs u otra solución in-memory equivalente.
-- Debe soportar varias imágenes reales cuyo tamaño total excedería una cuota típica de sessionStorage.
-- No hace falta sobrevivir a refresh completo.
-- Sí debe sobrevivir la navegación SPA necesaria entre Nueva entrega y el detalle.
-- El resto de interacciones de Visual Review debe seguir funcionando: review state, feedback con referencias y nuevas versiones locales.
+### Navegación del pilot
 
-## Implementación
+Ocultar links muertos o superficies todavía no funcionales. Mantener visibles Dashboard y Entregas. No borrar código futuro.
 
-Preferir un store dev-only mínimo en memoria, por ejemplo un `Map` compartido en `globalThis` del browser para evitar problemas si el módulo termina en chunks distintos.
+### Runbook
 
-- No usar `sessionStorage`/`localStorage` para almacenar imágenes.
-- No usar `FileReader.readAsDataURL` para persistir previews.
-- Crear `URL.createObjectURL(file)` al guardar la entrega simulada.
-- Mantener `isVisualReviewUploadId()` server-safe, porque `src/app/deliveries/[id]/page.tsx` lo usa antes de renderizar el detalle client-side.
-- Si hace falta separar helpers server-safe de store client-side, hacerlo de forma mínima.
-- Evitar una arquitectura paralela.
-- No modificar el flujo real prepare → R2 → finalize.
+Crear `docs/24-live-pilot.md` con instrucciones concretas para desplegar en Render, configurar PostgreSQL, Google OAuth, R2, variables de entorno, allowlist y un smoke test del flujo real. Drive debe figurar como opcional. No guardar secretos ni emails reales en Git.
 
-La liberación de object URLs puede ser best-effort al reemplazar/limpiar una entrega; no sacrificar la continuidad SPA por intentar persistirlos.
+### Smoke test esperado
 
-## Validación manual
+Login allowlisted → crear entrega real → recargar y conservarla → feedback con referencia → subir V2 → marcar V2 OK → salir/entrar y confirmar persistencia. Un usuario no allowlisted no debe poder entrar.
 
-En `SUQUIA_VISUAL_REVIEW=1`:
-
-1. abrir `Nueva entrega`;
-2. seleccionar varias imágenes cuyo tamaño combinado sea claramente mayor a una cuota típica de Web Storage (por ejemplo >10 MB);
-3. entregar;
-4. confirmar que abre el detalle con esas mismas imágenes y orden;
-5. abrir una pieza y confirmar que review/feedback/versionado local siguen funcionando.
-
-## Validaciones
-
-Ejecutar:
+### Validaciones
 
 ```bash
 npm test
@@ -68,10 +46,10 @@ npm run typecheck
 npm run build
 ```
 
-## Commit
+Confirmar también que Visual Review local sigue funcionando.
 
-Si todo queda correcto:
+### Commit
 
-`fix: keep visual review uploads in memory`
+`feat: prepare live pilot deployment`
 
 Push a `main` y detenerse.
