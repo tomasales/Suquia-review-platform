@@ -5,226 +5,57 @@ Este archivo contiene la única tarea operativa que Codex debe ejecutar después
 ## Protocolo
 
 1. Leer este archivo completo después del pull.
-2. Releer los docs/código relevantes antes de tocar comportamiento.
-3. Implementar únicamente este milestone.
-4. No inventar nuevas decisiones de producto fuera del scope.
-5. Mantener intacto el modo real de PostgreSQL/R2/Drive salvo que un ajuste visual compartido lo requiera.
-6. Ejecutar validaciones al final.
-7. Si hay un blocker real, documentarlo y detenerse; no abrir una arquitectura paralela.
-8. Si queda correcto, commit + push a `main` y detenerse.
+2. Releer el código relevante antes de tocar comportamiento.
+3. Implementar únicamente esta corrección.
+4. Mantener intacto el modo real PostgreSQL/R2/Drive.
+5. Ejecutar validaciones al final.
+6. Si queda correcto, commit + push a `main` y detenerse.
 
 ---
 
-# Tarea actual — Batch UX de validación + continuidad de Visual Review
+# Tarea actual — Corregir storage de uploads en Visual Review
 
-Venimos probando manualmente el MVP en `SUQUIA_VISUAL_REVIEW=1`. Esta tarea agrupa los hallazgos de esa validación para evitar varias rondas pequeñas de Codex.
+El batch `feat: improve visual review validation flow` quedó conceptualmente correcto, pero la implementación actual de `src/lib/visual-review-upload-store.ts` convierte cada archivo local a Data URL y serializa todas las imágenes dentro de `window.sessionStorage`.
 
-Objetivo principal: mejorar jerarquía/espacio en revisión y permitir probar el recorrido `Nueva entrega → Entregar → detalle → feedback/versionado` con los archivos que el usuario acaba de cargar, sin configurar PostgreSQL/R2/Google.
+Eso es un blocker para la validación manual: varias imágenes reales pueden superar rápidamente la cuota de sessionStorage y hacer fallar `Entregar` aunque el producto solo necesite conservar la composición durante navegación SPA.
 
-## No hacer
+## Objetivo
 
-- NO implementar ConversationReply.
-- NO implementar AI Memory/jobs.
-- NO implementar feedback general de Delivery.
-- NO cambiar Prisma schema.
-- NO cambiar reglas canónicas de PieceVersion/review/status.
-- NO rediseñar Dashboard/Guidelines/Journal.
-- NO convertir Visual Review en persistencia real.
-- NO tocar arquitectura de R2/Drive salvo para no romper imports/compartidos existentes.
+En `SUQUIA_VISUAL_REVIEW=1`, mantener la entrega simulada solamente en memoria del navegador durante la sesión SPA, sin serializar binarios/base64 en Web Storage.
 
-## Releer especialmente
+## Comportamiento esperado
 
-- `README.md`
-- `docs/02-deliveries.md`
-- `docs/03-pieces-and-versions.md`
-- `docs/04-feedback.md`
-- `docs/21-visual-review-mode.md` si existe
-- `src/components/deliveries/delivery-upload-flow.tsx`
-- `src/components/deliveries/piece-grid.tsx`
-- `src/components/deliveries/piece-card.tsx`
-- `src/components/deliveries/piece-review-modal.tsx`
-- `src/components/deliveries/piece-review-panel.tsx`
-- fixtures/helpers de Visual Review actuales
+- `Nueva entrega → Entregar → detalle` debe seguir mostrando exactamente los archivos seleccionados.
+- Debe preservar orden, tipo, nota general y notas por pieza.
+- Las imágenes deben mostrarse usando object URLs u otra solución in-memory equivalente.
+- Debe soportar varias imágenes reales cuyo tamaño total excedería una cuota típica de sessionStorage.
+- No hace falta sobrevivir a refresh completo.
+- Sí debe sobrevivir la navegación SPA necesaria entre Nueva entrega y el detalle.
+- El resto de interacciones de Visual Review debe seguir funcionando: review state, feedback con referencias y nuevas versiones locales.
 
----
+## Implementación
 
-## 1. Estado de Delivery con más jerarquía
+Preferir un store dev-only mínimo en memoria, por ejemplo un `Map` compartido en `globalThis` del browser para evitar problemas si el módulo termina en chunks distintos.
 
-En el detalle de una entrega, el badge de estado global (`Enviado para revisar`, `En revisión`, etc.) queda demasiado chico y perdido arriba a la derecha.
+- No usar `sessionStorage`/`localStorage` para almacenar imágenes.
+- No usar `FileReader.readAsDataURL` para persistir previews.
+- Crear `URL.createObjectURL(file)` al guardar la entrega simulada.
+- Mantener `isVisualReviewUploadId()` server-safe, porque `src/app/deliveries/[id]/page.tsx` lo usa antes de renderizar el detalle client-side.
+- Si hace falta separar helpers server-safe de store client-side, hacerlo de forma mínima.
+- Evitar una arquitectura paralela.
+- No modificar el flujo real prepare → R2 → finalize.
 
-Ajustar jerarquía visual para que el estado sea parte clara del header principal:
+La liberación de object URLs puede ser best-effort al reemplazar/limpiar una entrega; no sacrificar la continuidad SPA por intentar persistirlos.
 
-- badge más legible y con mayor padding/tamaño;
-- sin volverlo un CTA;
-- mantener sistema visual sobrio existente.
+## Validación manual
 
-Aplicar el mismo criterio al estado de la Piece dentro del header del modal de revisión: `Sin revisar`, `OK`, `Necesita cambios` no debe leerse como metadata diminuta.
-
-No cambiar los estados ni sus reglas.
-
----
-
-## 2. Grid de piezas: máximo 5 columnas en desktop
-
-La grilla actual llega a mostrar demasiadas piezas en una fila.
-
-Regla UX:
-
-- desktop ancho: máximo 5 columnas;
-- si hay más piezas, hacer wrap;
-- breakpoints inferiores deben reducir columnas de forma razonable;
-- NO scroll horizontal como comportamiento principal.
-
-Ejemplo con 12 piezas en desktop: `5 / 5 / 2`.
-
-Conservar orden y click para abrir review.
-
----
-
-## 3. Nueva entrega: Resumen debe comunicar qué falta
-
-El panel `Resumen` es demasiado pasivo. Debe responder claramente: **¿qué me falta para poder entregar?**
-
-Usar estados de copy claros:
-
-- sin tipo + sin piezas: `Falta completar la entrega` + `Elegí un tipo y agregá al menos una pieza.`
-- piezas pero sin tipo: `Falta elegir el tipo` + `Elegí Stories o Feed para continuar.`
-- tipo pero sin piezas: `Faltan piezas` + `Agregá al menos una pieza.`
-- listo: mantener resumen `Stories · N piezas` / `Feed · N piezas` y comunicar que está lista para entregar sin ruido técnico.
-
-El botón `Entregar` sigue siendo el gate fuerte.
-
-### Eliminar copy técnico del modo demo
-
-No mostrar dentro del Resumen:
-
-`Vista previa: la entrega todavía no se guardó.`
-
-Ese texto describe una limitación técnica de Visual Review y confunde el flujo de producto.
-
-Si hace falta indicar que estamos en demo, hacerlo de manera global/discreta y solo development, no como estado de la entrega.
-
----
-
-## 4. Reordenamiento: sacar las flechas visibles redundantes
-
-Las cards de Nueva entrega hoy tienen flechas arriba/abajo además de `Arrastrar`.
-
-Problemas:
-
-- visualmente las piezas están en horizontal;
-- ↑/↓ no comunica bien `antes/después`;
-- duplica la interacción de drag & drop.
-
-Eliminar esas flechas de la UI principal.
-
-Conservar:
-
-- drag & drop con `Arrastrar` como mecanismo principal;
-- orden accesible/teclado solo si ya existe una solución clara, pero no agregues un menú complejo para este milestone.
-
-No cambiar la semántica del orden.
-
----
-
-## 5. Visual Review: Entregar debe abrir la entrega que acabo de armar
-
-Este es el punto funcional más importante del batch.
-
-Hoy, en `SUQUIA_VISUAL_REVIEW=1`, `Entregar` ignora la composición recién armada y redirige a una fixture fija (`visual-stories-sent` / `visual-feed-review`). Eso impide validar el flujo real.
-
-### Comportamiento esperado en Visual Review
-
-Al crear una entrega con archivos locales y apretar `Entregar`:
-
-- abrir el detalle de UNA entrega simulada basada en esa composición;
-- mostrar exactamente los archivos/previews seleccionados;
-- preservar su orden;
-- preservar Stories/Feed;
-- preservar nota general;
-- preservar notas por pieza;
-- cada Piece comienza en V1 y `Sin revisar`;
-- permitir usar sobre esa entrega simulada las interacciones que Visual Review ya soporta: marcar OK/Necesita cambios, feedback con referencias y nueva versión en memoria.
-
-### Restricciones
-
-- DEV/Visual Review solamente;
-- NO PostgreSQL;
-- NO R2;
-- NO Drive;
-- NO Google OAuth;
-- no hace falta sobrevivir a refresh completo del navegador;
-- sí debe sobrevivir la navegación SPA necesaria para ir de `Nueva entrega` al detalle y seguir probando el flujo;
-- no contaminar el comportamiento real cuando `SUQUIA_VISUAL_REVIEW !== 1`.
-
-Reutilizar la infraestructura/fixtures de Visual Review actual en vez de crear una segunda app paralela.
-
-Si los object URLs/local state necesitan un store dev-only mínimo para atravesar la navegación, mantenerlo pequeño y explícitamente aislado a Visual Review.
-
----
-
-## 6. Review de Piece en desktop: modal casi fullscreen
-
-El modal actual de aproximadamente 1180×760 con sidebar de 360px queda chico para revisar piezas y feedback.
-
-Mantener el patrón modal/overlay porque permite:
-
-- conservar contexto de Delivery;
-- anterior/siguiente;
-- Escape/cerrar;
-- revisión rápida de varias piezas.
-
-Pero en desktop hacerlo prácticamente fullscreen:
-
-- margen exterior pequeño y consistente;
-- usar casi todo `100vw/100vh` disponible;
-- preview de pieza debe ganar espacio;
-- panel derecho de review/feedback debe ser claramente más ancho que el actual;
-- evitar clipping horizontal;
-- el contenido largo del panel derecho debe scrollear cómodamente sin que elementos como referencias/versiones queden “perdidos” por falta de ancho.
-
-No convertirlo en una route nueva en este milestone.
-
-Mantener comportamiento mobile fullscreen actual salvo ajustes necesarios por componentes compartidos.
-
----
-
-## 7. Eliminar la sección independiente `Referencias`
-
-Una referencia visual pertenece al Feedback concreto que explica por qué fue adjuntada.
-
-Hoy el feedback ya muestra sus `FeedbackAttachment` dentro del comentario, pero además hay una sección independiente `Referencias` en el panel de la versión. Esa duplicación confunde.
-
-Cambiar UI:
-
-- mantener attachments dentro de cada feedback;
-- seguir permitiendo click/preview de esas imágenes como hoy;
-- eliminar de la UI la sección independiente `Referencias` / `Sin referencias adjuntas` de `PieceReviewPanel`;
-- NO borrar `FeedbackAttachment` ni su flujo real;
-- no hacer migraciones;
-- si `selectedVersion.references` sigue existiendo por fixtures/legacy visual, no hace falta eliminar el tipo en este milestone salvo que esté completamente muerto y sea seguro.
-
----
-
-## Criterio de aceptación manual
-
-En `SUQUIA_VISUAL_REVIEW=1` debo poder:
+En `SUQUIA_VISUAL_REVIEW=1`:
 
 1. abrir `Nueva entrega`;
-2. elegir Stories o Feed;
-3. agregar varias imágenes propias;
-4. reordenarlas arrastrando;
-5. agregar notas;
-6. entregar;
-7. ver esas MISMAS imágenes en el detalle, máximo 5 por fila;
-8. abrir una pieza en modal casi fullscreen;
-9. entender claramente estado de Delivery y Piece;
-10. dejar feedback con una referencia y verla dentro de ese feedback, sin una segunda sección `Referencias` duplicada;
-11. continuar probando review/versionado en memoria.
-
-El modo real debe seguir usando el flujo existente prepare → R2 → finalize sin cambios funcionales.
-
----
+2. seleccionar varias imágenes cuyo tamaño combinado sea claramente mayor a una cuota típica de Web Storage (por ejemplo >10 MB);
+3. entregar;
+4. confirmar que abre el detalle con esas mismas imágenes y orden;
+5. abrir una pieza y confirmar que review/feedback/versionado local siguen funcionando.
 
 ## Validaciones
 
@@ -237,14 +68,10 @@ npm run typecheck
 npm run build
 ```
 
-Si `prisma validate` requiere `DATABASE_URL` y no está disponible, no inventarla; reportarlo solamente si se ejecuta.
-
-Además hacer una pasada manual en Visual Review de `Nueva entrega → Entregar → detalle → abrir pieza`.
-
 ## Commit
 
 Si todo queda correcto:
 
-`feat: improve visual review validation flow`
+`fix: keep visual review uploads in memory`
 
 Push a `main` y detenerse.
