@@ -34,10 +34,10 @@
 - Reintento manual.
 - Email a Tomi solo para errores graves del sistema/sincronización.
 - Guidelines como biblioteca manual consultable.
-- AI Memory como proceso activo en segundo plano basado en feedback de Tomi.
-- Generación de información estructurada para alimentar una base de conocimiento.
-- Visualización consultiva de 2-3 aprendizajes de IA en Dashboard.
-- Consulta completa de AI Memory cerca de Guidelines/documentación.
+- AI Memory basada únicamente en feedback de Tomi.
+- Procesamiento estructurado y trazable del feedback histórico.
+- Bloque consultivo en Dashboard: **Lo más marcado en las últimas reviews**.
+- Ese bloque resume feedback explícito de Tomi y puede mostrar recurrencia/evidencia fuente.
 - Búsqueda global.
 - Dashboard simple.
 
@@ -54,6 +54,8 @@
 - Entrenamiento de modelo propio.
 - Agente autónomo de revisión.
 - Pre-revisión automática por IA.
+- Evaluación automática de piezas contra feedback histórico.
+- Generación o modificación automática de Guidelines.
 - Reemplazar a Tomi en la revisión.
 - Recomendaciones obligatorias de IA durante carga o revisión.
 - Notificaciones normales por WhatsApp, Telegram, email, push o recordatorios.
