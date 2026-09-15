@@ -10,8 +10,6 @@ import {
   getDriveStatusTone,
 } from "@/lib/drive/status-format";
 
-import { utilityNav } from "@/components/layout/navigation";
-
 const toneClasses = {
   checking: "bg-info",
   problem: "bg-warning",
@@ -19,10 +17,13 @@ const toneClasses = {
   unknown: "bg-muted-foreground",
 };
 
-export function DriveStatusPanel({ mobile = false }: { mobile?: boolean }) {
+export function DriveStatusPanel() {
   const drive = useDriveRuntime();
-  const restoreItem = utilityNav[0];
-  const RestoreIcon = restoreItem.icon;
+
+  if (!drive.isEnabled) {
+    return null;
+  }
+
   const statusLabel = getDriveStatusLabel({
     isChecking: drive.isChecking,
     status: drive.drive.status,
@@ -77,18 +78,6 @@ export function DriveStatusPanel({ mobile = false }: { mobile?: boolean }) {
           </Button>
         )}
       </div>
-
-      <button
-        aria-disabled="true"
-        className={`mt-2 flex w-full items-center gap-2 rounded-[7px] text-left font-medium text-muted-foreground opacity-65 ${
-          mobile ? "h-10 text-sm" : "h-8 text-sm"
-        }`}
-        disabled
-        type="button"
-      >
-        <RestoreIcon className="size-4" strokeWidth={1.8} />
-        <span className="truncate">{restoreItem.label}</span>
-      </button>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { DriveStatusPanel } from "@/components/drive/drive-status-panel";
+import { useDriveRuntime } from "@/components/drive/drive-runtime";
 
 import { isNavActive, primaryNav, utilityNav } from "./navigation";
 
@@ -33,9 +34,11 @@ function getInitials(user: AppHeaderProps["user"]) {
 
 export function AppHeader({ user }: AppHeaderProps) {
   const displayName = user.name ?? user.email;
+  const drive = useDriveRuntime();
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const hasUtilityNav = utilityNav.length > 0;
 
   useEffect(() => {
     document.body.style.overflow = isMenuOpen || isUserMenuOpen ? "hidden" : "";
@@ -98,23 +101,27 @@ export function AppHeader({ user }: AppHeaderProps) {
             </nav>
 
             <div className="border-t border-border px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
-              <div className="mb-2">
-                <DriveStatusPanel mobile />
-              </div>
+              {drive.isEnabled ? (
+                <div className="mb-2">
+                  <DriveStatusPanel />
+                </div>
+              ) : null}
 
-              <nav className="space-y-1">
-                {utilityNav.slice(1).map((item) => (
-                  <Link
-                    className="flex h-11 items-center gap-3 rounded-[8px] px-3 text-sm font-medium text-muted-foreground"
-                    href={item.href}
-                    key={item.label}
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <item.icon className="size-4" strokeWidth={1.8} />
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                ))}
-              </nav>
+              {hasUtilityNav ? (
+                <nav className="space-y-1">
+                  {utilityNav.map((item) => (
+                    <Link
+                      className="flex h-11 items-center gap-3 rounded-[8px] px-3 text-sm font-medium text-muted-foreground"
+                      href={item.href}
+                      key={item.label}
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <item.icon className="size-4" strokeWidth={1.8} />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  ))}
+                </nav>
+              ) : null}
 
               <div className="mt-3 border-t border-border pt-3">
                 <div className="mb-3 text-sm">

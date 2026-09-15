@@ -4,11 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { DriveStatusPanel } from "@/components/drive/drive-status-panel";
+import { useDriveRuntime } from "@/components/drive/drive-runtime";
 
 import { isNavActive, primaryNav, utilityNav } from "./navigation";
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const drive = useDriveRuntime();
+  const hasUtilityNav = utilityNav.length > 0;
 
   return (
     <aside className="hidden fixed inset-y-0 left-0 z-20 w-[var(--sidebar-width)] border-r border-border bg-surface lg:flex lg:flex-col">
@@ -42,23 +45,30 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="border-t border-border px-3 py-3">
-        <div className="mb-2">
-          <DriveStatusPanel />
+      {drive.isEnabled || hasUtilityNav ? (
+        <div className="border-t border-border px-3 py-3">
+          {drive.isEnabled ? (
+            <div className="mb-2">
+              <DriveStatusPanel />
+            </div>
+          ) : null}
+
+          {hasUtilityNav ? (
+            <nav className="space-y-1">
+              {utilityNav.map((item) => (
+                <Link
+                  className="flex h-9 items-center gap-3 rounded-[8px] px-3 text-sm font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+                  href={item.href}
+                  key={item.label}
+                >
+                  <item.icon className="size-4" strokeWidth={1.8} />
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              ))}
+            </nav>
+          ) : null}
         </div>
-        <nav className="space-y-1">
-          {utilityNav.slice(1).map((item) => (
-            <Link
-              className="flex h-9 items-center gap-3 rounded-[8px] px-3 text-sm font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground"
-              href={item.href}
-              key={item.label}
-            >
-              <item.icon className="size-4" strokeWidth={1.8} />
-              <span className="truncate">{item.label}</span>
-            </Link>
-          ))}
-        </nav>
-      </div>
+      ) : null}
     </aside>
   );
 }

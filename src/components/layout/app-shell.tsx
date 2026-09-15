@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { DriveRuntimeProvider } from "@/components/drive/drive-runtime";
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { isDriveConfigured } from "@/lib/drive/client";
 import { isVisualReviewMode } from "@/lib/visual-review";
 
 type AppShellProps = {
@@ -15,8 +16,13 @@ type AppShellProps = {
 };
 
 export function AppShell({ children, user }: AppShellProps) {
+  const visualReviewMode = isVisualReviewMode();
+
   return (
-    <DriveRuntimeProvider visualReviewMode={isVisualReviewMode()}>
+    <DriveRuntimeProvider
+      driveEnabled={isDriveConfigured()}
+      visualReviewMode={visualReviewMode}
+    >
       <div className="min-h-screen bg-background text-foreground">
         <AppSidebar />
         <div className="min-h-screen lg:pl-[var(--sidebar-width)]">

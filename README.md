@@ -36,8 +36,11 @@ Para modo real hacen falta, como mínimo:
 - `DATABASE_URL`
 - credenciales Google OAuth/Auth.js
 - variables Cloudflare R2
-- variables Google Drive para backup server-side
 - `DELIVERY_UPLOAD_SECRET`
+
+Google Drive es opcional para el primer pilot. Si no se configuran sus variables,
+el flujo central sigue funcionando con PostgreSQL + R2 y la UI no muestra estado
+de Drive.
 
 Variables R2:
 
@@ -58,6 +61,30 @@ DRIVE_ROOT_FOLDER_ID=
 DRIVE_STORIES_FOLDER_ID=
 DRIVE_FEED_FOLDER_ID=
 DRIVE_SHARED_DRIVE_ID=
+```
+
+## Deploy Node/Next
+
+Orden recomendado para un servidor Node/Next.js:
+
+```bash
+npm ci
+npm run build
+npm run db:migrate:deploy
+npm run start
+```
+
+Antes del primer login, agregar emails autorizados:
+
+```bash
+npm run allowlist:email -- user@example.com
+npm run allowlist:email -- user@example.com --ai-learning-source
+```
+
+Healthcheck mínimo:
+
+```bash
+curl https://tu-dominio.example/api/health
 ```
 
 El flujo real de **Nueva entrega** prepara IDs definitivos, emite un receipt firmado temporal, sube piezas directo desde el navegador a R2 con URLs firmadas, verifica los objetos, crea Delivery/Pieces/PieceVersion V1 en PostgreSQL, registra Journal y deja una SyncOperation pendiente para el backup en Drive.
@@ -105,6 +132,7 @@ Este modo usa un usuario ficticio y fixtures in-memory solo en development. No p
 - `11-dashboard.md`: dashboard simple y superficies principales.
 - `12-mvp-scope.md`: alcance del MVP y exclusiones explícitas.
 - `13-open-decisions.md`: decisiones pendientes y ambigüedades conocidas.
+- `24-live-pilot.md`: checklist de deploy y smoke test del Live Pilot MVP.
 
 ## Instrucción para futuros agentes/Codex
 

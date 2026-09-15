@@ -17,6 +17,15 @@ export type DriveConfig = {
 let cachedDriveClient: drive_v3.Drive | null = null;
 let cachedConfig: DriveConfig | null = null;
 
+export function isDriveConfigured(env: NodeJS.ProcessEnv = process.env) {
+  return Boolean(
+    env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() &&
+      env.DRIVE_ROOT_FOLDER_ID?.trim() &&
+      env.DRIVE_STORIES_FOLDER_ID?.trim() &&
+      env.DRIVE_FEED_FOLDER_ID?.trim(),
+  );
+}
+
 export function readDriveConfigFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): DriveConfig {

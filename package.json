@@ -11,8 +11,10 @@
     "typecheck": "next typegen && tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
+    "allowlist:email": "tsx scripts/authorize-email.ts",
     "storage:smoke": "tsx scripts/storage-smoke-test.ts"
   },
   "dependencies": {

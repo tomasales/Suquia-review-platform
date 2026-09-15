@@ -26,6 +26,7 @@ type DriveRuntimeOptions = {
 type DriveRuntimeContextValue = DriveStatusResponse & {
   checkNow: (options?: DriveRuntimeOptions) => Promise<void>;
   isChecking: boolean;
+  isEnabled: boolean;
   isProcessing: boolean;
   notifyBackupPending: () => Promise<void>;
   refreshStatus: () => Promise<DriveStatusResponse | null>;
@@ -54,13 +55,16 @@ const DriveRuntimeContext = createContext<DriveRuntimeContextValue | null>(null)
 
 export function DriveRuntimeProvider({
   children,
+  driveEnabled,
   visualReviewMode,
 }: {
   children: ReactNode;
+  driveEnabled: boolean;
   visualReviewMode: boolean;
 }) {
   const pathname = usePathname();
   const { showToast } = useToast();
+  const isEnabled = visualReviewMode || driveEnabled;
   const [status, setStatus] = useState<DriveStatusResponse>(
     visualReviewMode ? visualReviewDriveStatus : unknownDriveStatus,
   );
@@ -75,6 +79,11 @@ export function DriveRuntimeProvider({
     if (visualReviewMode) {
       setStatus(visualReviewDriveStatus);
       return visualReviewDriveStatus;
+    }
+
+    if (!driveEnabled) {
+      setStatus(unknownDriveStatus);
+      return unknownDriveStatus;
     }
 
     try {
@@ -94,10 +103,10 @@ export function DriveRuntimeProvider({
       setStatus(unknownDriveStatus);
       return null;
     }
-  }, [visualReviewMode]);
+  }, [driveEnabled, visualReviewMode]);
 
   const processPending = useCallback(async () => {
-    if (visualReviewMode || processingRef.current) {
+    if (!driveEnabled || visualReviewMode || processingRef.current) {
       return;
     }
 
@@ -120,11 +129,11 @@ export function DriveRuntimeProvider({
       setIsProcessing(false);
       await refreshStatus();
     }
-  }, [refreshStatus, visualReviewMode]);
+  }, [driveEnabled, refreshStatus, visualReviewMode]);
 
   const checkNow = useCallback(
     async (options: DriveRuntimeOptions = {}) => {
-      if (visualReviewMode || checkingRef.current) {
+      if (!driveEnabled || visualReviewMode || checkingRef.current) {
         return;
       }
 
@@ -153,11 +162,11 @@ export function DriveRuntimeProvider({
         setIsChecking(false);
       }
     },
-    [processPending, refreshStatus, visualReviewMode],
+    [driveEnabled, processPending, refreshStatus, visualReviewMode],
   );
 
   const retryFailed = useCallback(async () => {
-    if (visualReviewMode || processingRef.current) {
+    if (!driveEnabled || visualReviewMode || processingRef.current) {
       return;
     }
 
@@ -202,10 +211,10 @@ export function DriveRuntimeProvider({
       processingRef.current = false;
       setIsProcessing(false);
     }
-  }, [refreshStatus, showToast, visualReviewMode]);
+  }, [driveEnabled, refreshStatus, showToast, visualReviewMode]);
 
   const notifyBackupPending = useCallback(async () => {
-    if (visualReviewMode) {
+    if (!driveEnabled || visualReviewMode) {
       return;
     }
 
@@ -217,10 +226,10 @@ export function DriveRuntimeProvider({
     ) {
       await processPending();
     }
-  }, [processPending, refreshStatus, visualReviewMode]);
+  }, [driveEnabled, processPending, refreshStatus, visualReviewMode]);
 
   useEffect(() => {
-    if (visualReviewMode) {
+    if (!driveEnabled || visualReviewMode) {
       return;
     }
 
@@ -243,10 +252,10 @@ export function DriveRuntimeProvider({
     return () => {
       cancelled = true;
     };
-  }, [checkNow, refreshStatus, visualReviewMode]);
+  }, [checkNow, driveEnabled, refreshStatus, visualReviewMode]);
 
   useEffect(() => {
-    if (visualReviewMode) {
+    if (!driveEnabled || visualReviewMode) {
       return;
     }
 
@@ -257,10 +266,10 @@ export function DriveRuntimeProvider({
     }, HEALTH_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [checkNow, visualReviewMode]);
+  }, [checkNow, driveEnabled, visualReviewMode]);
 
   useEffect(() => {
-    if (visualReviewMode) {
+    if (!driveEnabled || visualReviewMode) {
       return;
     }
 
@@ -277,10 +286,10 @@ export function DriveRuntimeProvider({
 
     return () =>
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [checkNow, visualReviewMode]);
+  }, [checkNow, driveEnabled, visualReviewMode]);
 
   useEffect(() => {
-    if (visualReviewMode) {
+    if (!driveEnabled || visualReviewMode) {
       return;
     }
 
@@ -299,13 +308,14 @@ export function DriveRuntimeProvider({
     return () => {
       cancelled = true;
     };
-  }, [pathname, processPending, refreshStatus, visualReviewMode]);
+  }, [driveEnabled, pathname, processPending, refreshStatus, visualReviewMode]);
 
   const value = useMemo(
     () => ({
       ...status,
       checkNow,
       isChecking,
+      isEnabled,
       isProcessing,
       notifyBackupPending,
       refreshStatus,
@@ -313,6 +323,7 @@ export function DriveRuntimeProvider({
     }),
     [
       checkNow,
+      isEnabled,
       isChecking,
       isProcessing,
       notifyBackupPending,
