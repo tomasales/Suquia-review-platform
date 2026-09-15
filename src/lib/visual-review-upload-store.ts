@@ -20,13 +20,19 @@ export type VisualReviewUploadDelivery = {
   type: DeliveryType;
 };
 
-const storageKey = "suquia.visualReview.uploadDeliveries";
+const storeKey = "__suquiaVisualReviewUploadDeliveries";
+
+declare global {
+  interface Window {
+    [storeKey]?: Map<string, VisualReviewUploadDelivery>;
+  }
+}
 
 export function isVisualReviewUploadId(id: string) {
   return id.startsWith(visualReviewUploadIdPrefix);
 }
 
-export async function saveVisualReviewUploadDelivery(input: {
+export function saveVisualReviewUploadDelivery(input: {
   generalNote: string;
   pieces: Array<{
     file: File;
@@ -37,17 +43,15 @@ export async function saveVisualReviewUploadDelivery(input: {
 }) {
   const createdAt = new Date().toISOString();
   const id = `${visualReviewUploadIdPrefix}${Date.now()}`;
-  const pieces = await Promise.all(
-    input.pieces.map(async (piece, index) => ({
-      fileSizeBytes: piece.file.size,
-      id: `${id}-piece-${index + 1}`,
-      imageSrc: await readFileAsDataUrl(piece.file),
-      mimeType: piece.file.type,
-      note: piece.note.trim() || null,
-      originalFilename: piece.file.name,
-      position: index + 1,
-    })),
-  );
+  const pieces = input.pieces.map((piece, index) => ({
+    fileSizeBytes: piece.file.size,
+    id: `${id}-piece-${index + 1}`,
+    imageSrc: URL.createObjectURL(piece.file),
+    mimeType: piece.file.type,
+    note: piece.note.trim() || null,
+    originalFilename: piece.file.name,
+    position: index + 1,
+  }));
   const delivery: VisualReviewUploadDelivery = {
     createdAt,
     generalNote: input.generalNote.trim() || null,
@@ -55,66 +59,30 @@ export async function saveVisualReviewUploadDelivery(input: {
     pieces,
     type: input.type,
   };
-  const deliveries = readVisualReviewUploadDeliveries();
 
-  window.sessionStorage.setItem(
-    storageKey,
-    JSON.stringify({
-      ...deliveries,
-      [id]: delivery,
-    }),
-  );
+  getBrowserStore().set(id, delivery);
 
   return delivery;
 }
 
 export function getVisualReviewUploadDelivery(id: string) {
-  return readVisualReviewUploadDeliveries()[id] ?? null;
-}
-
-function readVisualReviewUploadDeliveries(): Record<
-  string,
-  VisualReviewUploadDelivery
-> {
   if (typeof window === "undefined") {
-    return {};
+    return null;
   }
 
-  const raw = window.sessionStorage.getItem(storageKey);
-
-  if (!raw) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-
-    return isRecord(parsed)
-      ? (parsed as Record<string, VisualReviewUploadDelivery>)
-      : {};
-  } catch {
-    return {};
-  }
+  return getBrowserStore().get(id) ?? null;
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
+function getBrowserStore() {
+  const existingStore = window[storeKey];
 
-    reader.addEventListener("error", () => {
-      reject(new Error("No pudimos preparar la preview local."));
-    });
-    reader.addEventListener("load", () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("No pudimos preparar la preview local."));
-      }
-    });
-    reader.readAsDataURL(file);
-  });
-}
+  if (existingStore) {
+    return existingStore;
+  }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  const store = new Map<string, VisualReviewUploadDelivery>();
+
+  window[storeKey] = store;
+
+  return store;
 }
