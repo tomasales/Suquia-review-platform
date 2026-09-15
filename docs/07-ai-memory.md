@@ -2,90 +2,103 @@
 
 ## Objetivo
 
-AI Memory es una capa de conocimiento estructurado generada a partir del feedback histórico.
+AI Memory resume y organiza feedback histórico de Tomi sin convertirlo en reglas nuevas.
 
-Forma parte del MVP como proceso activo en segundo plano. El valor propio del sistema debe estar en la base de conocimiento que se construye a partir del trabajo real.
+En el MVP, su uso visible principal es mostrar qué temas aparecieron con más frecuencia en las reviews recientes.
 
 ## Decisiones tomadas
 
-- AI Memory sí forma parte del MVP.
-- Cada feedback authored by Tomi debe conservarse íntegramente.
-- Cada feedback authored by Tomi debe procesarse en segundo plano.
-- El procesamiento debe generar información estructurada.
-- Esa información estructurada alimenta una base de conocimiento.
+- El feedback original de Tomi es siempre la fuente de verdad.
+- Solo feedback authored by Tomi alimenta AI Memory.
+- El sistema puede resumir, etiquetar y agrupar feedback repetido.
+- Todo resumen debe poder rastrearse a feedback real.
 - No entrenar un modelo propio en el MVP.
-- AI Memory podrá utilizar un LLM externo para procesar y estructurar el feedback. El proveedor y la implementación definitiva están pendientes de definición.
-- No hacer que la IA guarde lo que quiera.
-- Definir una estructura consistente.
-- Nunca eliminar el feedback original luego del análisis.
-- La información estructurada es una capa adicional, no un reemplazo del feedback original.
+- Puede utilizarse un LLM externo para procesar feedback.
 
-## Regla crítica
+Feedback de Dirección u otros usuarios no debe mezclarse con esta memoria.
 
-Para recomendaciones y aprendizaje del criterio creativo, solamente utilizar feedback authored by Tomi.
+## Uso visible en el MVP
 
-Feedback de Dirección no entra en AI Memory como criterio de diseño.
+El bloque principal debe responder:
 
-## Información mínima a conservar
+**¿Qué cosas marcó más Tomi en las últimas reviews?**
 
-Cada feedback de Tomi debe conservarse íntegramente y además poder procesarse en segundo plano para producir información estructurada.
+Ejemplo:
 
-La memoria debe poder guardar, como mínimo:
+**Lo más marcado en las últimas reviews**
 
-- feedback original;
-- resumen;
-- categorías/tags;
-- tipo de pieza;
-- entrega;
-- versión;
-- fecha;
-- referencias visuales;
-- usuario autor;
-- contexto;
-- recurrencia;
-- relación con feedbacks similares.
+- Dar más protagonismo a la fotografía.
+- Reducir recursos gráficos cuando la imagen ya tiene mucho peso.
+- Evitar que el texto compita con el producto.
 
-## Uso visible de IA en MVP
+Estos puntos solo pueden aparecer si resumen de forma fiel feedback explícito de Tomi.
 
-La IA debe ser consultiva, no intrusiva.
+La interfaz puede mostrar recurrencia y permitir acceder a los comentarios fuente.
 
-Reglas:
+## Límites
 
-- No mostrar recomendaciones obligatorias mientras se carga una entrega.
-- No interrumpir el proceso de revisión.
-- En Dashboard puede existir un pequeño bloque con 2-3 aprendizajes/recomendaciones.
-- La consulta completa vive cerca de Guidelines/documentación.
-- La diseñadora decide si quiere entrar a consultarla.
-- La IA debe resumir patrones reales del feedback de Tomi.
+La IA puede:
+
+- resumir lo que Tomi dijo;
+- agrupar feedbacks que expresan la misma idea;
+- detectar repetición explícita en reviews recientes;
+- reformular de manera breve sin cambiar el significado.
 
 La IA no debe:
 
 - inventar principios;
-- inventar Guidelines;
-- recomendar cosas sin respaldo histórico;
-- actuar como autoridad creativa.
+- generar o modificar Guidelines;
+- convertir un patrón reciente en una regla permanente;
+- concluir qué debería hacerse en una pieza nueva;
+- analizar automáticamente una pieza contra el historial;
+- extrapolar una devolución a contextos donde Tomi no la aplicó.
 
-Ejemplos válidos, siempre que provengan del historial real:
+Ejemplo válido:
 
-- Dar más aire entre bloques.
-- Evitar centrar textos en este tipo de composición.
-- Usar un solo recurso gráfico cuando la imagen ya tiene suficiente peso.
+> En las últimas reviews marcaste varias veces que la fotografía debería tener más protagonismo.
+
+Ejemplo inválido:
+
+> En SUQUIA siempre hay que priorizar la fotografía.
+
+## Relación con Guidelines
+
+- **Guidelines**: documentación oficial, estática y administrada manualmente.
+- **AI Memory**: resumen descriptivo y trazable del feedback real de Tomi.
+
+AI Memory nunca publica, crea ni actualiza Guidelines automáticamente.
+
+## Información a conservar
+
+Como mínimo:
+
+- feedback original;
+- autor;
+- entrega;
+- pieza;
+- versión;
+- fecha;
+- referencias visuales;
+- resumen estructurado;
+- categorías/tags cuando ayuden a agrupar;
+- relación con feedbacks similares;
+- vínculo con el feedback fuente.
 
 ## Fuera del MVP
 
-La arquitectura debe quedar preparada para que en el futuro esta memoria pueda alimentar capacidades más avanzadas.
-
-No forma parte del MVP:
-
 - agente autónomo de revisión;
-- pre-revisión automática de piezas;
+- pre-revisión automática;
+- evaluación automática de piezas contra feedback histórico;
+- generación automática de Guidelines;
 - reemplazar a Tomi en la revisión;
-- entrenamiento de un modelo propio.
+- entrenamiento de modelo propio.
 
 ## Pendiente de definición
 
 - Proveedor definitivo del LLM.
-- Esquema definitivo de AI Memory.
+- Ventana exacta de `reviews recientes`.
+- Esquema definitivo y mecanismo de agrupamiento.
+- Forma de mostrar evidencia sin sobrecargar el Dashboard.
 
 ## Referencias cruzadas
 
