@@ -96,6 +96,28 @@ DELIVERY_UPLOAD_SECRET=
 
 `DELIVERY_UPLOAD_SECRET` debe ser un secreto fuerte y privado.
 
+### CORS obligatorio para uploads desde browser
+
+La app sube piezas y referencias directamente desde el navegador hacia URLs PUT firmadas de R2. Por eso el bucket debe aceptar requests cross-origin desde el dominio público de la app.
+
+Configurar CORS del bucket con el dominio exacto del pilot, por ejemplo:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://TU_DOMINIO"],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+No usar `*` en `AllowedOrigins` para el pilot si ya existe un dominio estable. Si cambia el dominio de Render o se agrega un dominio propio, actualizar esta regla antes de probar uploads.
+
+La validación mínima es crear una entrega real desde el dominio público y confirmar que el PUT a R2 no falla por CORS en el navegador.
+
 ## Google Drive Opcional
 
 Para habilitar backup a Drive, configurar:
@@ -176,7 +198,8 @@ npm run allowlist:email -- user@example.com
 npm run start
 ```
 
-7. Revisar healthcheck:
+7. Configurar CORS del bucket R2 para `https://TU_DOMINIO`.
+8. Revisar healthcheck:
 
 ```bash
 curl https://TU_DOMINIO/api/health
@@ -186,7 +209,7 @@ curl https://TU_DOMINIO/api/health
 
 1. Intentar login con un usuario no allowlisted y confirmar que no accede.
 2. Login con usuario allowlisted.
-3. Crear una Delivery real con piezas.
+3. Crear una Delivery real con varias piezas y confirmar que los uploads R2 no tienen errores CORS.
 4. Recargar la página y confirmar que la Delivery sigue visible.
 5. Abrir el detalle.
 6. Agregar feedback con una referencia.
@@ -200,3 +223,4 @@ curl https://TU_DOMINIO/api/health
 - No guardar secretos en Git.
 - No commitear emails reales en documentación, seeds o scripts.
 - Mantener `SUQUIA_VISUAL_REVIEW` vacío o sin definir en producción.
+- Limitar CORS de R2 al dominio o dominios reales del pilot.
