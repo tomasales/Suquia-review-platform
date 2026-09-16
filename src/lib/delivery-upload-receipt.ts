@@ -29,6 +29,7 @@ type BaseUploadReceiptPayload = {
   issuedAt: number;
   kind:
     | "delivery-creation"
+    | "guideline-brand-manual"
     | "piece-feedback-attachments"
     | "piece-version-upload";
   userId: string;
@@ -62,6 +63,15 @@ export type PieceFeedbackAttachmentsReceiptPayload = BaseUploadReceiptPayload & 
   kind: "piece-feedback-attachments";
   pieceId: string;
   pieceVersionId: string;
+};
+
+export type GuidelineBrandManualUploadReceiptPayload = BaseUploadReceiptPayload & {
+  fileSizeBytes: number;
+  filename: string;
+  guidelineId: string;
+  kind: "guideline-brand-manual";
+  mimeType: string;
+  storageKey: string;
 };
 
 type CreateReceiptOptions = {
@@ -195,9 +205,47 @@ export function verifyPieceFeedbackAttachmentsReceipt(
   return payload;
 }
 
+export function createGuidelineBrandManualUploadReceipt(
+  payload: Omit<
+    GuidelineBrandManualUploadReceiptPayload,
+    "expiresAt" | "issuedAt" | "kind"
+  >,
+  options: CreateReceiptOptions = {},
+) {
+  const now = options.now ?? new Date();
+  const issuedAt = Math.floor(now.getTime() / 1000);
+  const receiptPayload: GuidelineBrandManualUploadReceiptPayload = {
+    expiresAt: issuedAt + DELIVERY_UPLOAD_RECEIPT_EXPIRES_IN_SECONDS,
+    fileSizeBytes: payload.fileSizeBytes,
+    filename: payload.filename,
+    guidelineId: payload.guidelineId,
+    issuedAt,
+    kind: "guideline-brand-manual",
+    mimeType: payload.mimeType,
+    storageKey: payload.storageKey,
+    userId: payload.userId,
+  };
+
+  return createUploadReceiptToken(receiptPayload, options);
+}
+
+export function verifyGuidelineBrandManualUploadReceipt(
+  token: string,
+  options: VerifyReceiptOptions = {},
+) {
+  const payload = verifyUploadReceipt(token, options);
+
+  if (payload.kind !== "guideline-brand-manual") {
+    throw new StorageValidationError("Receipt de subida inválido.");
+  }
+
+  return payload;
+}
+
 function createUploadReceiptToken(
   payload:
     | DeliveryUploadReceiptPayload
+    | GuidelineBrandManualUploadReceiptPayload
     | PieceFeedbackAttachmentsReceiptPayload
     | PieceVersionUploadReceiptPayload,
   options: CreateReceiptOptions,
@@ -240,6 +288,7 @@ function verifyUploadReceipt(
 export function assertDeliveryUploadReceiptUser(
   payload:
     | DeliveryUploadReceiptPayload
+    | GuidelineBrandManualUploadReceiptPayload
     | PieceFeedbackAttachmentsReceiptPayload
     | PieceVersionUploadReceiptPayload,
   userId: string,
@@ -263,6 +312,7 @@ function parseReceiptPayload(
   encodedPayload: string,
 ):
   | DeliveryUploadReceiptPayload
+  | GuidelineBrandManualUploadReceiptPayload
   | PieceFeedbackAttachmentsReceiptPayload
   | PieceVersionUploadReceiptPayload {
   let payload: unknown;
@@ -275,14 +325,22 @@ function parseReceiptPayload(
 
   if (
     !isRecord(payload) ||
-    typeof payload.deliveryId !== "string" ||
     typeof payload.expiresAt !== "number" ||
     typeof payload.issuedAt !== "number" ||
     (payload.kind !== "delivery-creation" &&
+      payload.kind !== "guideline-brand-manual" &&
       payload.kind !== "piece-feedback-attachments" &&
       payload.kind !== "piece-version-upload") ||
     typeof payload.userId !== "string"
   ) {
+    throw new StorageValidationError("Receipt de subida inválido.");
+  }
+
+  if (payload.kind === "guideline-brand-manual") {
+    return parseGuidelineBrandManualUploadReceiptPayload(payload);
+  }
+
+  if (typeof payload.deliveryId !== "string") {
     throw new StorageValidationError("Receipt de subida inválido.");
   }
 
@@ -309,6 +367,32 @@ function parseReceiptPayload(
     pieces: payload.pieces.map(parseReceiptPiece),
     type: payload.type,
     userId: payload.userId,
+  };
+}
+
+function parseGuidelineBrandManualUploadReceiptPayload(
+  payload: Record<string, unknown>,
+): GuidelineBrandManualUploadReceiptPayload {
+  if (
+    typeof payload.fileSizeBytes !== "number" ||
+    typeof payload.filename !== "string" ||
+    typeof payload.guidelineId !== "string" ||
+    typeof payload.mimeType !== "string" ||
+    typeof payload.storageKey !== "string"
+  ) {
+    throw new StorageValidationError("Receipt de subida inválido.");
+  }
+
+  return {
+    expiresAt: payload.expiresAt as number,
+    fileSizeBytes: payload.fileSizeBytes,
+    filename: payload.filename,
+    guidelineId: payload.guidelineId,
+    issuedAt: payload.issuedAt as number,
+    kind: "guideline-brand-manual",
+    mimeType: payload.mimeType,
+    storageKey: payload.storageKey,
+    userId: payload.userId as string,
   };
 }
 

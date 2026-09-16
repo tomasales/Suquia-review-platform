@@ -29,11 +29,36 @@ validateUploadUrlInput({
   purpose: "piece-version",
 });
 
+validateUploadUrlInput({
+  fileSizeBytes: 1024,
+  filename: "manual.pdf",
+  mimeType: "application/pdf",
+  purpose: "guideline",
+});
+
 assertThrowsStorageValidation(() =>
   validateUploadUrlInput({
     fileSizeBytes: 1024,
     filename: "pieza.gif",
     mimeType: "image/gif",
+    purpose: "piece-version",
+  }),
+);
+
+assertThrowsStorageValidation(() =>
+  validateUploadUrlInput({
+    fileSizeBytes: 1024,
+    filename: "manual.png",
+    mimeType: "image/png",
+    purpose: "guideline",
+  }),
+);
+
+assertThrowsStorageValidation(() =>
+  validateUploadUrlInput({
+    fileSizeBytes: 1024,
+    filename: "manual.pdf",
+    mimeType: "application/pdf",
     purpose: "piece-version",
   }),
 );
@@ -90,10 +115,10 @@ assert.match(
 
 assert.match(
   buildGuidelineStorageKey({
-    filename: "manual.png",
+    filename: "manual.pdf",
     guidelineId: "guideline-1",
   }),
-  /^guidelines\/guideline-1\/.+-manual.png$/,
+  /^guidelines\/guideline-1\/.+-manual.pdf$/,
 );
 
 const config = readR2ConfigFromEnv({

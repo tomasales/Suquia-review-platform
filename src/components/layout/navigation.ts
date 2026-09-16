@@ -3,10 +3,10 @@ import { ArchiveRestore, BookOpen, Clock3, FileStack, LayoutDashboard, Settings 
 export const primaryNav = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
   { label: "Entregas", icon: FileStack, href: "/deliveries" },
+  { label: "Guidelines", icon: BookOpen, href: "/guidelines" },
 ];
 
 export const futurePrimaryNav = [
-  { label: "Guidelines / Knowledge", icon: BookOpen, href: "#" },
   { label: "Journal", icon: Clock3, href: "#" },
 ];
 

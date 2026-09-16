@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import {
   assertDeliveryUploadReceiptUser,
   createDeliveryUploadReceipt,
+  createGuidelineBrandManualUploadReceipt,
   createPieceFeedbackAttachmentsReceipt,
   createPieceVersionUploadReceipt,
   DELIVERY_UPLOAD_RECEIPT_EXPIRES_IN_SECONDS,
   verifyDeliveryUploadReceipt,
+  verifyGuidelineBrandManualUploadReceipt,
   verifyPieceFeedbackAttachmentsReceipt,
   verifyPieceVersionUploadReceipt,
 } from "./delivery-upload-receipt";
@@ -176,6 +178,41 @@ assertThrowsStorageValidation(() =>
 );
 assertThrowsStorageValidation(() =>
   verifyPieceVersionUploadReceipt(feedbackAttachmentsToken, { now, secret }),
+);
+
+const guidelineToken = createGuidelineBrandManualUploadReceipt(
+  {
+    fileSizeBytes: 8192,
+    filename: "manual.pdf",
+    guidelineId: "guideline-1",
+    mimeType: "application/pdf",
+    storageKey: "guidelines/guideline-1/upload-id-manual.pdf",
+    userId: "user-1",
+  },
+  { now, secret },
+);
+const verifiedGuidelinePayload = verifyGuidelineBrandManualUploadReceipt(
+  guidelineToken,
+  { now, secret },
+);
+
+assert.equal(verifiedGuidelinePayload.kind, "guideline-brand-manual");
+assert.equal(verifiedGuidelinePayload.guidelineId, "guideline-1");
+assert.equal(verifiedGuidelinePayload.storageKey, "guidelines/guideline-1/upload-id-manual.pdf");
+assert.doesNotThrow(() =>
+  assertDeliveryUploadReceiptUser(verifiedGuidelinePayload, "user-1"),
+);
+assertThrowsStorageValidation(() =>
+  assertDeliveryUploadReceiptUser(verifiedGuidelinePayload, "another-user"),
+);
+assertThrowsStorageValidation(() =>
+  verifyDeliveryUploadReceipt(guidelineToken, { now, secret }),
+);
+assertThrowsStorageValidation(() =>
+  verifyPieceVersionUploadReceipt(guidelineToken, { now, secret }),
+);
+assertThrowsStorageValidation(() =>
+  verifyPieceFeedbackAttachmentsReceipt(guidelineToken, { now, secret }),
 );
 
 console.log("delivery upload receipt unit tests passed");
