@@ -14,6 +14,12 @@ type PieceCardProps = {
 export function PieceCard({ onOpen, piece, reviewState }: PieceCardProps) {
   const latestVersion = piece.versions[0] ?? null;
   const state = getReviewStatePresentation(reviewState);
+  const versionCount = piece.versions.length;
+  const versionLabel = latestVersion
+    ? versionCount > 1
+      ? `V${latestVersion.versionNumber} · ${versionCount} versiones`
+      : `V${latestVersion.versionNumber}`
+    : "Sin version";
 
   return (
     <button
@@ -38,7 +44,7 @@ export function PieceCard({ onOpen, piece, reviewState }: PieceCardProps) {
             Pieza {piece.position}
           </p>
           <p className="whitespace-nowrap text-xs text-muted-foreground">
-            {latestVersion ? `V${latestVersion.versionNumber}` : "Sin version"}
+            {versionLabel}
           </p>
         </div>
         <span

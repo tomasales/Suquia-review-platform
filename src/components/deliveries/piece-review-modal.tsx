@@ -184,15 +184,6 @@ export function PieceReviewModal({
         <div className="flex flex-1 flex-col overflow-y-auto md:contents">
           <section className="relative flex h-[44vh] max-h-[372px] shrink-0 items-center justify-center overflow-hidden bg-[#f1efe9] p-4 md:h-auto md:max-h-none md:min-h-0 md:p-6">
             <button
-              aria-label="Cerrar modal"
-              className="absolute right-3 top-3 hidden size-8 items-center justify-center rounded-[8px] border border-border bg-surface text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground md:inline-flex"
-              onClick={onClose}
-              type="button"
-            >
-              <X className="size-4" strokeWidth={1.8} />
-            </button>
-
-            <button
               aria-label="Pieza anterior"
               className="absolute left-3 top-1/2 hidden size-9 -translate-y-1/2 items-center justify-center rounded-[8px] border border-border bg-surface text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35 md:inline-flex"
               disabled={!hasPrevious}
@@ -233,6 +224,7 @@ export function PieceReviewModal({
               isReadOnly={isReadOnly}
               isReviewSaving={isReviewSaving}
               onDraftChange={onDraftChange}
+              onClose={onClose}
               onFeedbackAttemptEdit={onFeedbackAttemptEdit}
               onFeedbackReferenceRemove={onFeedbackReferenceRemove}
               onFeedbackReferenceSelect={onFeedbackReferenceSelect}
@@ -260,6 +252,7 @@ export function PieceReviewModal({
             isReadOnly={isReadOnly}
             isReviewSaving={isReviewSaving}
             onDraftChange={onDraftChange}
+            onClose={onClose}
             onFeedbackAttemptEdit={onFeedbackAttemptEdit}
             onFeedbackReferenceRemove={onFeedbackReferenceRemove}
             onFeedbackReferenceSelect={onFeedbackReferenceSelect}

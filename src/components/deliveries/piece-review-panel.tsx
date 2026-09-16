@@ -34,6 +34,7 @@ type PieceReviewPanelProps = {
   isMobileLayout?: boolean;
   isReadOnly: boolean;
   isReviewSaving: boolean;
+  onClose: () => void;
   onDraftChange: (value: string) => void;
   onFeedbackAttemptEdit: () => void;
   onFeedbackReferenceRemove: (referenceId: string) => void;
@@ -64,6 +65,7 @@ export function PieceReviewPanel({
   isReadOnly,
   isReviewSaving,
   isMobileLayout = false,
+  onClose,
   onDraftChange,
   onFeedbackAttemptEdit,
   onFeedbackReferenceRemove,
@@ -127,9 +129,19 @@ export function PieceReviewPanel({
               V{selectedVersion.versionNumber}
             </h2>
           </div>
-          <Badge size="lg" tone={state.tone}>
-            {state.label}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge size="lg" tone={state.tone}>
+              {state.label}
+            </Badge>
+            <button
+              aria-label="Cerrar revisión"
+              className="inline-flex size-8 items-center justify-center rounded-[8px] border border-border bg-surface text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="size-4" strokeWidth={1.8} />
+            </button>
+          </div>
         </div>
 
         {piece.initialNote ? (
@@ -192,7 +204,7 @@ export function PieceReviewPanel({
               <Button
                 className={
                   reviewState === "OK"
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-50"
+                    ? "!border-emerald-400 !bg-emerald-50 !text-emerald-800 ring-1 ring-emerald-300 hover:!bg-emerald-50"
                     : ""
                 }
                 disabled={isReadOnly || isReviewSaving}
@@ -206,7 +218,7 @@ export function PieceReviewPanel({
               <Button
                 className={
                   reviewState === "NEEDS_CHANGES"
-                    ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-50"
+                    ? "!border-amber-500 !bg-amber-50 !text-amber-900 ring-1 ring-amber-400 hover:!bg-amber-50"
                     : ""
                 }
                 disabled={isReadOnly || isReviewSaving}
@@ -540,36 +552,36 @@ export function PieceReviewPanel({
               Versión anterior · solo lectura
             </div>
           ) : (
-          <div className="mx-auto grid max-w-md grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
-            <Button
-              className={
-                reviewState === "OK"
-                  ? "min-h-11 px-2 text-[13px] border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-50"
-                  : "min-h-11 px-2 text-[13px]"
-              }
-              disabled={isReadOnly || isReviewSaving}
-              onClick={() => onReviewStateChange("OK")}
-              size="md"
-              variant="secondary"
-            >
-              <Check className="mr-1.5 size-4" strokeWidth={1.8} />
-              OK
-            </Button>
-            <Button
-              className={
-                reviewState === "NEEDS_CHANGES"
-                  ? "min-h-11 px-2 text-[13px] border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-50"
-                  : "min-h-11 px-2 text-[13px]"
-              }
-              disabled={isReadOnly || isReviewSaving}
-              onClick={() => onReviewStateChange("NEEDS_CHANGES")}
-              size="md"
-              variant="secondary"
-            >
-              <RotateCcw className="mr-1.5 size-4" strokeWidth={1.8} />
-              Necesita cambios
-            </Button>
-          </div>
+            <div className="mx-auto grid max-w-md grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+              <Button
+                className={
+                  reviewState === "OK"
+                    ? "min-h-11 !border-emerald-400 !bg-emerald-50 px-2 text-[13px] !text-emerald-800 ring-1 ring-emerald-300 hover:!bg-emerald-50"
+                    : "min-h-11 px-2 text-[13px]"
+                }
+                disabled={isReadOnly || isReviewSaving}
+                onClick={() => onReviewStateChange("OK")}
+                size="md"
+                variant="secondary"
+              >
+                <Check className="mr-1.5 size-4" strokeWidth={1.8} />
+                OK
+              </Button>
+              <Button
+                className={
+                  reviewState === "NEEDS_CHANGES"
+                    ? "min-h-11 !border-amber-500 !bg-amber-50 px-2 text-[13px] !text-amber-900 ring-1 ring-amber-400 hover:!bg-amber-50"
+                    : "min-h-11 px-2 text-[13px]"
+                }
+                disabled={isReadOnly || isReviewSaving}
+                onClick={() => onReviewStateChange("NEEDS_CHANGES")}
+                size="md"
+                variant="secondary"
+              >
+                <RotateCcw className="mr-1.5 size-4" strokeWidth={1.8} />
+                Necesita cambios
+              </Button>
+            </div>
           )}
         </div>
       ) : null}
