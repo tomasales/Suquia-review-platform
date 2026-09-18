@@ -8,10 +8,12 @@ export function MagicPilusoSignature({
   variant = "compact",
 }: MagicPilusoSignatureProps) {
   const isLogin = variant === "login";
+  const logoHeight = isLogin ? 32 : 24;
+  const logoWidth = isLogin ? 28 : 21;
 
   return (
     <div
-      className={`flex flex-col items-center ${isLogin ? "gap-2" : "gap-1.5"}`}
+      className={`flex items-center justify-center ${isLogin ? "gap-2" : "gap-1.5"}`}
     >
       <span
         className={`text-subtle-foreground ${
@@ -22,11 +24,11 @@ export function MagicPilusoSignature({
       </span>
       <Image
         alt="Magic Piluso"
-        className={`w-auto ${isLogin ? "h-16" : "h-12"}`}
-        height={isLogin ? 64 : 48}
+        className="h-auto"
+        height={logoHeight}
         src="/magic-piluso-logo.svg"
         unoptimized
-        width={isLogin ? 56 : 42}
+        width={logoWidth}
       />
     </div>
   );
