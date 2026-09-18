@@ -124,8 +124,8 @@ export function AppHeader({ user }: AppHeaderProps) {
                 </nav>
               ) : null}
 
-              <div className="mt-3 border-t border-border pt-3">
-                <MagicPilusoSignature />
+              <div className="mt-3 border-t border-border px-3 pt-3">
+                <MagicPilusoSignature align="start" />
               </div>
 
               <div className="mt-3 border-t border-border pt-3">

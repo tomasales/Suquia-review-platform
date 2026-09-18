@@ -47,8 +47,8 @@ export function AppSidebar() {
       </nav>
 
       <div className="border-t border-border px-3 py-3">
-        <div className="mb-3">
-          <MagicPilusoSignature />
+        <div className="mb-3 px-3">
+          <MagicPilusoSignature align="start" />
         </div>
 
         {drive.isEnabled ? (

@@ -1,19 +1,22 @@
 import Image from "next/image";
 
 type MagicPilusoSignatureProps = {
+  align?: "center" | "start";
   variant?: "compact" | "login";
 };
 
 export function MagicPilusoSignature({
+  align = "center",
   variant = "compact",
 }: MagicPilusoSignatureProps) {
   const isLogin = variant === "login";
-  const logoHeight = isLogin ? 32 : 24;
-  const logoWidth = isLogin ? 28 : 21;
+  const justifyClass = align === "start" ? "justify-start" : "justify-center";
+  const logoHeight = 36;
+  const logoWidth = 31;
 
   return (
     <div
-      className={`flex items-center justify-center ${isLogin ? "gap-2" : "gap-1.5"}`}
+      className={`flex items-center ${justifyClass} ${isLogin ? "gap-2" : "gap-1.5"}`}
     >
       <span
         className={`text-subtle-foreground ${
