@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { SignInButton } from "@/components/auth/sign-in-button";
+import { MagicPilusoSignature } from "@/components/layout/magic-piluso-signature";
 import { Surface } from "@/components/ui/surface";
 import { getAuthorizedUser } from "@/lib/session";
 
@@ -61,6 +62,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </p>
           </div>
         </Surface>
+
+        <div className="mt-8">
+          <MagicPilusoSignature variant="login" />
+        </div>
       </div>
     </main>
   );

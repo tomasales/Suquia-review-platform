@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { DriveStatusPanel } from "@/components/drive/drive-status-panel";
 import { useDriveRuntime } from "@/components/drive/drive-runtime";
+import { MagicPilusoSignature } from "@/components/layout/magic-piluso-signature";
 
 import { isNavActive, primaryNav, utilityNav } from "./navigation";
 
@@ -58,7 +59,7 @@ export function AppHeader({ user }: AppHeaderProps) {
             onClick={() => setIsMenuOpen(false)}
             type="button"
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[min(320px,86vw)] flex-col border-r border-border bg-surface shadow-[0_18px_60px_rgba(25,24,23,0.16)]">
+          <aside className="absolute inset-y-0 left-0 flex w-[min(320px,86vw)] flex-col overflow-y-auto border-r border-border bg-surface shadow-[0_18px_60px_rgba(25,24,23,0.16)]">
             <div className="flex items-start justify-between gap-4 border-b border-border px-4 pb-3 pt-[calc(0.875rem+env(safe-area-inset-top))]">
               <div>
                 <p className="text-base font-semibold tracking-tight text-foreground">
@@ -122,6 +123,10 @@ export function AppHeader({ user }: AppHeaderProps) {
                   ))}
                 </nav>
               ) : null}
+
+              <div className="mt-3 border-t border-border pt-3">
+                <MagicPilusoSignature />
+              </div>
 
               <div className="mt-3 border-t border-border pt-3">
                 <div className="mb-3 text-sm">

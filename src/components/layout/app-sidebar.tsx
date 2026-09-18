@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { DriveStatusPanel } from "@/components/drive/drive-status-panel";
 import { useDriveRuntime } from "@/components/drive/drive-runtime";
+import { MagicPilusoSignature } from "@/components/layout/magic-piluso-signature";
 
 import { isNavActive, primaryNav, utilityNav } from "./navigation";
 
@@ -45,30 +46,32 @@ export function AppSidebar() {
         })}
       </nav>
 
-      {drive.isEnabled || hasUtilityNav ? (
-        <div className="border-t border-border px-3 py-3">
-          {drive.isEnabled ? (
-            <div className="mb-2">
-              <DriveStatusPanel />
-            </div>
-          ) : null}
-
-          {hasUtilityNav ? (
-            <nav className="space-y-1">
-              {utilityNav.map((item) => (
-                <Link
-                  className="flex h-9 items-center gap-3 rounded-[8px] px-3 text-sm font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground"
-                  href={item.href}
-                  key={item.label}
-                >
-                  <item.icon className="size-4" strokeWidth={1.8} />
-                  <span className="truncate">{item.label}</span>
-                </Link>
-              ))}
-            </nav>
-          ) : null}
+      <div className="border-t border-border px-3 py-3">
+        <div className="mb-3">
+          <MagicPilusoSignature />
         </div>
-      ) : null}
+
+        {drive.isEnabled ? (
+          <div className="mb-2">
+            <DriveStatusPanel />
+          </div>
+        ) : null}
+
+        {hasUtilityNav ? (
+          <nav className="space-y-1">
+            {utilityNav.map((item) => (
+              <Link
+                className="flex h-9 items-center gap-3 rounded-[8px] px-3 text-sm font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+                href={item.href}
+                key={item.label}
+              >
+                <item.icon className="size-4" strokeWidth={1.8} />
+                <span className="truncate">{item.label}</span>
+              </Link>
+            ))}
+          </nav>
+        ) : null}
+      </div>
     </aside>
   );
 }
